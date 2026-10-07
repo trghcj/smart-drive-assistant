@@ -72,11 +72,27 @@ class DriveAgent:
             ]
         }
 
+        # List of supported models in order of preference
+        models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+        response = None
+        last_err = None
+
+        for model_name in models_to_try:
+            try:
+                response = self.client.models.generate_content(
+                    model=model_name,
+                    contents=f"System: {system_instruction}\n\nUser Input: {json.dumps(user_content, indent=2)}",
+                )
+                if response:
+                    break
+            except Exception as err:
+                last_err = err
+                continue
+
+        if not response:
+            raise last_err or Exception("Failed to call Gemini model")
+
         try:
-            response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=f"System: {system_instruction}\n\nUser Input: {json.dumps(user_content, indent=2)}",
-            )
             raw_text = response.text.strip()
             
             # Clean possible markdown wrapping ```json ... ```
