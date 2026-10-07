@@ -165,10 +165,17 @@ def search_drive(q: str = "", session_id: str = Query(...)):
 @app.post("/api/agent/chat", response_model=PlanResponse)
 def chat_with_agent(req: ChatRequest, session_id: str = Query(...)):
     """Analyze user request and propose structured plan."""
-    drive = get_drive_service(session_id)
-    agent = DriveAgent(drive)
-    plan = agent.analyze_and_plan(user_prompt=req.message, current_folder_id=req.current_folder_id)
-    return plan
+    try:
+        drive = get_drive_service(session_id)
+        agent = DriveAgent(drive)
+        plan = agent.analyze_and_plan(user_prompt=req.message, current_folder_id=req.current_folder_id)
+        return plan
+    except Exception as e:
+        print(f"Error in chat_with_agent: {e}")
+        return PlanResponse(
+            explanation=f"Notice: {str(e)}",
+            operations=[]
+        )
 
 @app.post("/api/agent/execute", response_model=ExecutionResult)
 def execute_plan(req: ExecutePlanRequest, session_id: str = Query(...)):
