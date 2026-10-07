@@ -25,10 +25,10 @@ from .agent import DriveAgent
 
 app = FastAPI(title="Smart Drive Assistant API")
 
-# Enable CORS for React frontend
+# Enable CORS for React frontend (including Vercel deployments and localhost)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
