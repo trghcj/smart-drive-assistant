@@ -9,3 +9,4 @@ google-api-python-client>=2.149.0
 google-genai>=0.1.1
 requests>=2.32.3
 aiofiles>=24.1.0
+python-multipart>=0.0.12
