@@ -160,6 +160,28 @@ def search_drive(q: str = "", session_id: str = Query(...)):
     results = drive.search_files(text_query=q)
     return {"files": results}
 
+from fastapi import UploadFile, File
+
+@app.post("/api/drive/upload")
+async def upload_file_to_drive(
+    file: UploadFile = File(...),
+    folder_id: str = "root",
+    session_id: str = Query(...)
+):
+    """Upload a local desktop file into the current Google Drive folder."""
+    try:
+        drive = get_drive_service(session_id)
+        content = await file.read()
+        uploaded = drive.upload_file(
+            filename=file.filename,
+            file_bytes=content,
+            mime_type=file.content_type,
+            parent_folder_id=folder_id
+        )
+        return {"success": True, "file": uploaded}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ----------------- AGENT AI ROUTES -----------------
 
 @app.post("/api/agent/chat", response_model=PlanResponse)

@@ -15,7 +15,9 @@ import {
   FolderPlus,
   FileSpreadsheet,
   FileImage,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  UploadCloud
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -45,6 +47,8 @@ export default function App() {
   const [executing, setExecuting] = useState(false);
   const [undoToken, setUndoToken] = useState(null);
   const [undoMessage, setUndoMessage] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   // Read session_id from URL query params on load
   useEffect(() => {
@@ -188,6 +192,32 @@ export default function App() {
     }
   };
 
+  const handleFileUpload = async (filesToUpload) => {
+    if (!filesToUpload || filesToUpload.length === 0) return;
+    setUploading(true);
+    let successCount = 0;
+
+    for (const file of filesToUpload) {
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        await axios.post(`${API_BASE}/drive/upload?folder_id=${currentFolder}&session_id=${sessionId}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        successCount++;
+      } catch (err) {
+        console.error('Upload error:', err);
+      }
+    }
+
+    setUploading(false);
+    fetchFiles(currentFolder);
+    setChatLog((prev) => [
+      ...prev,
+      { role: 'assistant', text: `✅ Uploaded ${successCount} file(s) into the current folder. You can now ask me to organize or sort them!` }
+    ]);
+  };
+
   const getFileIcon = (item) => {
     if (item.isFolder) return <Folder className="w-5 h-5 text-amber-400" />;
     if (item.mimeType.includes('pdf')) return <FileText className="w-5 h-5 text-rose-400" />;
@@ -285,13 +315,27 @@ export default function App() {
                 ))}
               </nav>
 
-              <button
-                onClick={() => fetchFiles(currentFolder)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                title="Refresh folder"
-              >
-                <RefreshCw className={`w-4 h-4 ${loadingFiles ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center space-x-2">
+                <label className="flex items-center space-x-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition">
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>{uploading ? 'Uploading...' : 'Upload Files'}</span>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                  />
+                </label>
+
+                <button
+                  onClick={() => fetchFiles(currentFolder)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                  title="Refresh folder"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingFiles ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Undo Notification Bar */}
@@ -313,8 +357,27 @@ export default function App() {
               </div>
             )}
 
-            {/* File List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
+            {/* File List / Drag-and-Drop Dropzone */}
+            <div 
+              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragActive(false);
+                if (e.dataTransfer.files) {
+                  handleFileUpload(e.dataTransfer.files);
+                }
+              }}
+              className={`flex-1 overflow-y-auto p-4 space-y-1.5 transition ${
+                dragActive ? 'bg-indigo-950/30 border-2 border-dashed border-indigo-500 m-2 rounded-2xl' : ''
+              }`}
+            >
+              {dragActive && (
+                <div className="flex flex-col items-center justify-center p-8 text-indigo-400 font-medium text-sm animate-pulse">
+                  <UploadCloud className="w-10 h-10 mb-2" />
+                  Drop files to upload directly to this Google Drive folder
+                </div>
+              )}
               {loadingFiles ? (
                 <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
                   Loading Drive files...

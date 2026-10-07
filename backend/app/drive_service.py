@@ -110,6 +110,23 @@ class DriveService:
             fields="id, name"
         ).execute()
 
+    def upload_file(self, filename: str, file_bytes: bytes, mime_type: str, parent_folder_id: str = "root") -> Dict[str, Any]:
+        """Upload a file directly to Google Drive."""
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+
+        file_metadata = {
+            "name": filename,
+            "parents": [parent_folder_id]
+        }
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type or "application/octet-stream", resumable=True)
+        uploaded = self.service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id, name, mimeType, webViewLink, size"
+        ).execute()
+        return uploaded
+
     def get_about_info(self) -> Dict[str, Any]:
         """Get drive user & storage quota info."""
         return self.service.about().get(fields="user, storageQuota").execute()
