@@ -16,7 +16,4 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 # Google Drive scopes needed for reading, moving, creating files/folders
 DRIVE_SCOPES = [
     "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "openid"
 ]
