@@ -72,8 +72,8 @@ class DriveAgent:
             ]
         }
 
-        # List of supported models in order of preference
-        models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+        # Google API requires gemini-3.8-flash
+        models_to_try = ["gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
         response = None
         last_err = None
 
