@@ -21,7 +21,10 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
 
 export default function App() {
-  const [sessionId, setSessionId] = useState(null);
+  const [sessionId, setSessionId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('session_id') || localStorage.getItem('drive_session_id') || null;
+  });
   const [userProfile, setUserProfile] = useState(null);
   const [quota, setQuota] = useState(null);
   const [files, setFiles] = useState([]);

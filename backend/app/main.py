@@ -39,11 +39,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory session store & undo history (for MVP development)
-# Map of session_id -> credentials_dict
-USER_SESSIONS: Dict[str, dict] = {}
-# Undo history: undo_token -> list of inverted operations
-UNDO_STORE: Dict[str, list] = {}
+import os
+from pathlib import Path
+
+# Persisted file storage for sessions and undo tokens
+STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage"
+STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+SESSIONS_FILE = STORAGE_DIR / "sessions.json"
+UNDO_FILE = STORAGE_DIR / "undo.json"
+
+def load_data(file_path: Path) -> dict:
+    if file_path.exists():
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_data(file_path: Path, data: dict):
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"Error saving {file_path}: {e}")
+
+USER_SESSIONS: Dict[str, dict] = load_data(SESSIONS_FILE)
+UNDO_STORE: Dict[str, list] = load_data(UNDO_FILE)
 
 def get_client_config():
     return {
@@ -106,6 +128,7 @@ def google_callback(code: str, state: Optional[str] = None):
         "client_secret": creds.client_secret,
         "scopes": creds.scopes
     }
+    save_data(SESSIONS_FILE, USER_SESSIONS)
 
     # Redirect user back to frontend with session_id token
     redirect_target = f"{FRONTEND_URL}/?session_id={session_id}"
