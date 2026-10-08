@@ -23,7 +23,9 @@ import {
   Clock,
   Trash2,
   FileCheck,
-  Share2
+  Share2,
+  Mic,
+  MicOff
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -62,6 +64,7 @@ export default function App() {
   const [scheduleCron, setScheduleCron] = useState('every_friday');
   const [scheduleFolder, setScheduleFolder] = useState('Weekly Archive');
   const [scheduleNotice, setScheduleNotice] = useState(null);
+  const [isListening, setIsListening] = useState(false);
 
   // Read session_id from URL query params on load
   useEffect(() => {
@@ -168,6 +171,50 @@ export default function App() {
       ]);
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const toggleVoiceInput = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice recognition is not supported in this browser. Please use Google Chrome or Edge.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setPrompt(transcript);
+        setIsListening(false);
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (err) {
+      console.error('Failed to start speech recognition:', err);
+      setIsListening(false);
     }
   };
 
@@ -615,10 +662,26 @@ export default function App() {
                   type="text"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Ask to organize, sort, create folders..."
+                  placeholder={isListening ? "Listening... speak now..." : "Ask or speak to organize, sort, create folders..."}
                   className="w-full bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none py-1.5"
                   disabled={analyzing}
                 />
+                
+                {/* Voice / Mic Button */}
+                <button
+                  type="button"
+                  onClick={toggleVoiceInput}
+                  disabled={analyzing}
+                  title={isListening ? "Stop listening" : "Speak your command"}
+                  className={`p-1.5 rounded-lg transition cursor-pointer mr-1 ${
+                    isListening 
+                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse' 
+                      : 'text-slate-400 hover:text-indigo-400'
+                  }`}
+                >
+                  {isListening ? <MicOff className="w-4 h-4 text-rose-400" /> : <Mic className="w-4 h-4" />}
+                </button>
+
                 <button
                   type="submit"
                   disabled={!prompt.trim() || analyzing}
