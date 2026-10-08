@@ -3,29 +3,36 @@ import axios from 'axios';
 import {
   Folder,
   FileText,
-  CheckCircle,
-  RotateCcw,
-  Send,
-  HardDrive,
-  RefreshCw,
-  ExternalLink,
-  ChevronRight,
-  ChevronDown,
-  FolderPlus,
   FileSpreadsheet,
   FileImage,
-  Plus,
-  UploadCloud,
-  Copy,
+  HardDrive,
+  Users,
   Clock,
-  FileCheck,
-  Share2,
-  Mic,
-  MicOff,
+  Star,
+  Trash2,
+  Copy,
+  Sparkles,
+  HelpCircle,
+  Settings,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  RefreshCw,
+  List,
+  LayoutGrid,
+  MoreVertical,
   Search,
   X,
-  PanelRight,
-  ArrowUpDown
+  Paperclip,
+  Send,
+  Mic,
+  MicOff,
+  CheckCircle,
+  RotateCcw,
+  ExternalLink,
+  ShieldCheck,
+  Zap,
+  FolderSync
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -42,34 +49,41 @@ export default function App() {
   const [folderHistory, setFolderHistory] = useState([{ id: 'root', name: 'My Drive' }]);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
-  // Chat & Agent state
+  // Search & view mode
+  const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
+  const [selectedNav, setSelectedNav] = useState('my-drive');
+  const [selectedFileIds, setSelectedFileIds] = useState(new Set());
+
+  // Assistant & Chat state
+  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState('suggestions'); // 'suggestions' or 'activity'
   const [prompt, setPrompt] = useState('');
   const [chatLog, setChatLog] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [proposedPlan, setProposedPlan] = useState(null);
+  const [reviewing, setReviewing] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [undoToken, setUndoToken] = useState(null);
   const [undoMessage, setUndoMessage] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
+  // Modals & menus
+  const [organizeMenu, setOrganizeMenu] = useState(false);
+  const [profileMenu, setProfileMenu] = useState(false);
   const [duplicatesModal, setDuplicatesModal] = useState(false);
   const [duplicateList, setDuplicateList] = useState([]);
   const [scanningDuplicates, setScanningDuplicates] = useState(false);
   const [scheduleModal, setScheduleModal] = useState(false);
   const [scheduleCron, setScheduleCron] = useState('every_friday');
   const [scheduleFolder, setScheduleFolder] = useState('Weekly Archive');
-  const [scheduleNotice, setScheduleNotice] = useState(null);
-  const [isListening, setIsListening] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [deleteAccountModal, setDeleteAccountModal] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+
   const chatEndRef = useRef(null);
   const promptInputRef = useRef(null);
-  const [assistantOpen, setAssistantOpen] = useState(true);
-  const [organizeMenu, setOrganizeMenu] = useState(false);
-  const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState('name');
-  const [sortMenu, setSortMenu] = useState(false);
-  const [reviewing, setReviewing] = useState(false);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -143,6 +157,7 @@ export default function App() {
     try {
       const res = await axios.get(`${API_BASE}/drive/files?folder_id=${folderId}&session_id=${sessionId}`);
       setFiles(res.data.files || []);
+      setSelectedFileIds(new Set());
     } catch (err) {
       console.error('Error fetching files:', err);
     } finally {
@@ -159,121 +174,6 @@ export default function App() {
     const target = folderHistory[index];
     setFolderHistory((prev) => prev.slice(0, index + 1));
     setCurrentFolder(target.id);
-  };
-
-  // Agent Chat & Proposal
-  const handleSendMessage = async (e) => {
-    e?.preventDefault();
-    if (!prompt.trim() || analyzing) return;
-
-    const userMessage = prompt;
-    setPrompt('');
-    setChatLog((prev) => [...prev, { role: 'user', text: userMessage }]);
-    setAnalyzing(true);
-    setProposedPlan(null);
-    setReviewing(false);
-
-    try {
-      const res = await axios.post(`${API_BASE}/agent/chat?session_id=${sessionId}`, {
-        message: userMessage,
-        current_folder_id: currentFolder
-      });
-
-      setChatLog((prev) => [
-        ...prev, 
-        { role: 'assistant', text: res.data.explanation }
-      ]);
-
-      if (res.data.operations && res.data.operations.length > 0) {
-        setProposedPlan(res.data);
-      }
-    } catch (err) {
-      setChatLog((prev) => [
-        ...prev, 
-        { role: 'assistant', text: `Request failed: ${err.response?.data?.detail || err.message}` }
-      ]);
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  const toggleVoiceInput = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Voice recognition is not supported in this browser. Please use Google Chrome or Edge.");
-      return;
-    }
-
-    if (isListening) {
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setPrompt(transcript);
-        setIsListening(false);
-      };
-
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognition.start();
-    } catch (err) {
-      console.error('Failed to start speech recognition:', err);
-      setIsListening(false);
-    }
-  };
-
-  const handleExecutePlan = async () => {
-    if (!proposedPlan) return;
-    setExecuting(true);
-    try {
-      const res = await axios.post(`${API_BASE}/agent/execute?session_id=${sessionId}`, {
-        operations: proposedPlan.operations
-      });
-      if (res.data.undo_token) {
-        setUndoToken(res.data.undo_token);
-      }
-      setUndoMessage(res.data.message);
-      setProposedPlan(null);
-      setReviewing(false);
-      // Refresh folder contents
-      fetchFiles(currentFolder);
-    } catch (err) {
-      alert(`Execution error: ${err.response?.data?.detail || err.message}`);
-    } finally {
-      setExecuting(false);
-    }
-  };
-
-  const handleUndo = async () => {
-    if (!undoToken) return;
-    try {
-      const res = await axios.post(`${API_BASE}/agent/undo?undo_token=${undoToken}&session_id=${sessionId}`);
-      alert(res.data.message);
-      setUndoToken(null);
-      setUndoMessage(null);
-      fetchFiles(currentFolder);
-    } catch (err) {
-      alert(`Undo failed: ${err.message}`);
-    }
   };
 
   const handleFileUpload = async (filesToUpload) => {
@@ -298,8 +198,9 @@ export default function App() {
     fetchFiles(currentFolder);
     setChatLog((prev) => [
       ...prev,
-      { role: 'assistant', text: `Uploaded ${successCount} file(s) to this folder.` }
+      { role: 'assistant', text: `Uploaded ${successCount} file(s) into this folder.` }
     ]);
+    setActiveTab('activity');
   };
 
   const handleScanDuplicates = async () => {
@@ -322,387 +223,541 @@ export default function App() {
         cron_time: scheduleCron,
         target_folder_name: scheduleFolder
       });
-      setScheduleNotice(res.data.message);
       setScheduleModal(false);
       setChatLog((prev) => [
         ...prev,
         { role: 'assistant', text: res.data.message }
       ]);
+      setActiveTab('activity');
     } catch (err) {
       alert(`Schedule error: ${err.message}`);
     }
   };
 
-  const getFileIcon = (item) => {
-    const cls = 'w-4 h-4 flex-shrink-0';
-    if (item.isFolder) return <Folder className={`${cls} text-ink-soft fill-hover`} />;
-    if (item.mimeType.includes('pdf')) return <FileText className={`${cls} text-rose-500`} />;
-    if (item.mimeType.includes('spreadsheet') || item.mimeType.includes('sheet')) return <FileSpreadsheet className={`${cls} text-emerald-600`} />;
-    if (item.mimeType.includes('image')) return <FileImage className={`${cls} text-amber-600`} />;
-    return <FileText className={`${cls} text-sky-600`} />;
+  const handleSendMessage = async (e) => {
+    e?.preventDefault();
+    if (!prompt.trim() || analyzing) return;
+
+    const userMessage = prompt;
+    setPrompt('');
+    setChatLog((prev) => [...prev, { role: 'user', text: userMessage }]);
+    setAnalyzing(true);
+    setProposedPlan(null);
+    setReviewing(false);
+    setActiveTab('activity');
+
+    try {
+      const res = await axios.post(`${API_BASE}/agent/chat?session_id=${sessionId}`, {
+        message: userMessage,
+        current_folder_id: currentFolder
+      });
+
+      setChatLog((prev) => [
+        ...prev,
+        { role: 'assistant', text: res.data.explanation }
+      ]);
+
+      if (res.data.operations && res.data.operations.length > 0) {
+        setProposedPlan(res.data);
+      }
+    } catch (err) {
+      setChatLog((prev) => [
+        ...prev,
+        { role: 'assistant', text: `Notice: ${err.response?.data?.detail || err.message}` }
+      ]);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleExecutePlan = async () => {
+    if (!proposedPlan) return;
+    setExecuting(true);
+    try {
+      const res = await axios.post(`${API_BASE}/agent/execute?session_id=${sessionId}`, {
+        operations: proposedPlan.operations
+      });
+      if (res.data.undo_token) {
+        setUndoToken(res.data.undo_token);
+      }
+      setUndoMessage(res.data.message);
+      setProposedPlan(null);
+      setReviewing(false);
+      fetchFiles(currentFolder);
+    } catch (err) {
+      alert(`Execution error: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoToken) return;
+    try {
+      const res = await axios.post(`${API_BASE}/agent/undo?undo_token=${undoToken}&session_id=${sessionId}`);
+      setUndoToken(null);
+      setUndoMessage(null);
+      fetchFiles(currentFolder);
+    } catch (err) {
+      alert(`Undo failed: ${err.message}`);
+    }
+  };
+
+  const toggleVoiceInput = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Voice recognition is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setPrompt(transcript);
+        setIsListening(false);
+      };
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+      recognition.start();
+    } catch (err) {
+      console.error('Speech recognition error:', err);
+      setIsListening(false);
+    }
+  };
+
+  const openAssistantWith = (text) => {
+    setAssistantOpen(true);
+    if (text) {
+      setPrompt(text);
+      setTimeout(() => promptInputRef.current?.focus(), 50);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFileIds.size === visibleFiles.length) {
+      setSelectedFileIds(new Set());
+    } else {
+      setSelectedFileIds(new Set(visibleFiles.map((f) => f.id)));
+    }
+  };
+
+  const toggleSelectFile = (id) => {
+    const next = new Set(selectedFileIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedFileIds(next);
   };
 
   const formatSize = (bytes) => {
-    if (!bytes) return '';
+    if (!bytes) return '—';
     const n = Number(bytes);
     if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
     return `${Math.max(1, Math.round(n / 1024))} KB`;
   };
 
   const formatDate = (iso) => {
-    if (!iso) return '';
+    if (!iso) return '—';
     const d = new Date(iso);
-    if (isNaN(d)) return '';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (isNaN(d)) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const sortLabels = { name: 'Name', size: 'Size', modified: 'Modified' };
-
-  const visibleFiles = files
-    .filter((f) => f.name.toLowerCase().includes(search.trim().toLowerCase()))
-    .sort((a, b) => {
-      if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
-      if (sortKey === 'size') return (Number(b.size) || 0) - (Number(a.size) || 0);
-      if (sortKey === 'modified') return (b.modifiedTime || '').localeCompare(a.modifiedTime || '');
-      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-    });
+  const getFileIcon = (item) => {
+    if (item.isFolder) {
+      return (
+        <svg className="w-5 h-5 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+        </svg>
+      );
+    }
+    if (item.mimeType.includes('pdf')) {
+      return (
+        <span className="w-5 h-5 rounded bg-rose-500 text-white font-bold text-[9px] flex items-center justify-center flex-shrink-0 tracking-tighter">
+          PDF
+        </span>
+      );
+    }
+    if (item.mimeType.includes('spreadsheet') || item.mimeType.includes('sheet')) {
+      return (
+        <span className="w-5 h-5 rounded bg-emerald-600 text-white font-bold text-[9px] flex items-center justify-center flex-shrink-0">
+          XLS
+        </span>
+      );
+    }
+    if (item.mimeType.includes('image')) {
+      return <FileImage className="w-5 h-5 text-sky-500 flex-shrink-0" />;
+    }
+    return (
+      <span className="w-5 h-5 rounded bg-blue-500 text-white font-bold text-[9px] flex items-center justify-center flex-shrink-0">
+        DOC
+      </span>
+    );
+  };
 
   const suggestions = [
-    'Find all invoice PDFs',
-    'Group placement documents',
-    'Find duplicate files',
-    'Create a folder for images'
+    { text: 'Find all invoice PDFs', icon: 'file' },
+    { text: 'Group placement documents', icon: 'folder' },
+    { text: 'Find duplicate files', icon: 'copy' },
+    { text: 'Create a folder for images', icon: 'image' },
   ];
 
-  const summarizePlan = (ops) => {
-    const lines = [];
-    const folders = ops.filter((o) => o.type === 'CREATE_FOLDER');
-    const moves = ops.filter((o) => o.type === 'MOVE_FILE');
-    const shares = ops.filter((o) => o.type === 'SHARE_FILE');
-    const docs = ops.filter((o) => o.type === 'CREATE_DOC');
-    const pdfs = ops.filter((o) => o.type === 'EXPORT_PDF');
-    if (folders.length) lines.push(`Create ${folders.length} folder${folders.length > 1 ? 's' : ''}`);
-    if (moves.length) {
-      const targets = [...new Set(moves.map((m) => m.target_folder_name).filter(Boolean))];
-      lines.push(`Move ${moves.length} file${moves.length > 1 ? 's' : ''}${targets.length ? ` to ${targets.join(', ')}` : ''}`);
-    }
-    if (shares.length) lines.push(`Share ${shares.length} file${shares.length > 1 ? 's' : ''}`);
-    if (docs.length) lines.push(`Create ${docs.length} document${docs.length > 1 ? 's' : ''}`);
-    if (pdfs.length) lines.push(`Export ${pdfs.length} file${pdfs.length > 1 ? 's' : ''} as PDF`);
-    return lines;
-  };
-
-  const describeOp = (op) => {
-    switch (op.type) {
-      case 'CREATE_FOLDER': return `Create folder: ${op.folder_name}`;
-      case 'MOVE_FILE': return `Move ${op.file_name} → ${op.target_folder_name}`;
-      case 'SHARE_FILE': return `Share ${op.file_name} with ${op.email} (${op.role})`;
-      case 'CREATE_DOC': return `Create document: ${op.doc_title || op.file_name}`;
-      case 'EXPORT_PDF': return `Export as PDF: ${op.file_name}`;
-      default: return op.type;
-    }
-  };
-
-  const openAssistantWith = (text) => {
-    setAssistantOpen(true);
-    if (text) setPrompt(text);
-    setTimeout(() => promptInputRef.current?.focus(), 0);
-  };
-
-  const modalShell = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
-  const modalCard = 'bg-white border border-line rounded-xl w-full p-5 shadow-xl';
-
-  const assistantPanel = (
-    <aside className="w-full lg:w-80 flex-shrink-0 min-h-0 h-[32rem] lg:h-auto flex flex-col border-t lg:border-t-0 lg:border-l border-line bg-white">
-      <div className="h-12 px-4 border-b border-line flex items-center justify-between flex-shrink-0">
-        <h2 className="font-semibold text-sm">Assistant</h2>
-        <button
-          onClick={() => setAssistantOpen(false)}
-          className="p-1.5 rounded-md text-ink-mute hover:bg-hover hover:text-ink cursor-pointer"
-          title="Collapse assistant"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 text-[13px]">
-        {chatLog.length === 0 && !analyzing && !proposedPlan && (
-          <div>
-            <p className="text-ink mb-3">What would you like to do?</p>
-            <ul className="border-t border-line">
-              {suggestions.map((s) => (
-                <li key={s}>
-                  <button
-                    onClick={() => openAssistantWith(s)}
-                    className="w-full text-left py-2 border-b border-line text-ink-soft hover:text-ink hover:bg-sub px-1 cursor-pointer"
-                  >
-                    {s}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          {chatLog.map((msg, i) => (
-            msg.role === 'user' ? (
-              <div key={i} className="flex justify-end">
-                <div className="max-w-[90%] bg-hover text-ink rounded-lg px-3 py-2 whitespace-pre-wrap break-words">
-                  {msg.text}
-                </div>
-              </div>
-            ) : (
-              <p key={i} className="text-ink-soft leading-relaxed whitespace-pre-wrap break-words">
-                {msg.text}
-              </p>
-            )
-          ))}
-
-          {analyzing && <p className="text-ink-mute">Searching files...</p>}
-
-          {/* Action review */}
-          {proposedPlan && (
-            <div className="border-t border-line pt-3">
-              <p className="text-xs text-ink-mute mb-1">
-                {proposedPlan.operations.length} change{proposedPlan.operations.length > 1 ? 's' : ''} ready for review
-              </p>
-              <ul className="text-ink space-y-0.5 mb-2">
-                {summarizePlan(proposedPlan.operations).map((line) => (
-                  <li key={line} className="font-medium">{line}</li>
-                ))}
-              </ul>
-
-              {reviewing && (
-                <ul className="mb-3 border-t border-line max-h-56 overflow-y-auto">
-                  {proposedPlan.operations.map((op) => (
-                    <li key={op.id} className="py-1.5 border-b border-line text-ink-soft break-words">
-                      {describeOp(op)}
-                      {op.reason && <span className="block text-xs text-ink-mute">{op.reason}</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <div className="flex justify-end gap-2 mt-2">
-                <button
-                  onClick={() => { setProposedPlan(null); setReviewing(false); }}
-                  disabled={executing}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                {reviewing ? (
-                  <button onClick={handleExecutePlan} disabled={executing} className="btn btn-primary">
-                    {executing ? 'Applying...' : 'Apply changes'}
-                  </button>
-                ) : (
-                  <button onClick={() => setReviewing(true)} className="btn btn-primary">
-                    Review changes
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        <div ref={chatEndRef} />
-      </div>
-
-      <form onSubmit={handleSendMessage} className="p-3 border-t border-line flex-shrink-0">
-        <div className="flex items-center gap-1 border border-line rounded-lg pl-3 pr-1 focus-within:border-accent">
-          <input
-            ref={promptInputRef}
-            type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder={isListening ? 'Listening...' : 'Ask about your files...'}
-            className="flex-1 min-w-0 bg-transparent text-[13px] placeholder-ink-mute outline-none py-2"
-            disabled={analyzing}
-          />
-          <button
-            type="button"
-            onClick={toggleVoiceInput}
-            disabled={analyzing}
-            title={isListening ? 'Stop listening' : 'Speak your request'}
-            className={`p-1.5 rounded-md cursor-pointer ${
-              isListening ? 'text-rose-600 bg-rose-50' : 'text-ink-mute hover:text-ink hover:bg-hover'
-            }`}
-          >
-            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </button>
-        </div>
-        <div className="flex justify-end mt-2">
-          <button type="submit" disabled={!prompt.trim() || analyzing} className="btn btn-primary">
-            <Send className="w-3.5 h-3.5" />
-            Send
-          </button>
-        </div>
-      </form>
-    </aside>
+  const visibleFiles = files.filter((f) =>
+    f.name.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   return (
-    <div className="min-h-screen lg:h-screen flex flex-col bg-white text-ink">
-      {/* Header */}
-      <header className="h-12 border-b border-line px-4 flex items-center gap-4 flex-shrink-0 sticky top-0 bg-white z-20">
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <HardDrive className="w-5 h-5 text-ink-soft" />
-          <h1 className="font-semibold text-[15px]">Smart Drive</h1>
+    <div className="min-h-screen bg-[#f7f8f6] text-[#2c3327] font-sans flex flex-col antialiased">
+      {/* ================= TOP NAVBAR ================= */}
+      <header className="h-16 px-6 bg-white border-b border-[#e5e8e1] flex items-center justify-between gap-4 sticky top-0 z-30">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 min-w-[200px]">
+          <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+          </div>
+          <span className="font-semibold text-lg tracking-tight text-[#1e2419]">Smart Drive</span>
         </div>
 
+        {/* Search Bar */}
         {sessionId && (
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-ink-mute absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search files..."
-              className="field !pl-8 !bg-sub !border-transparent focus:!bg-white focus:!border-accent"
-            />
+          <div className="flex-1 max-w-xl">
+            <div className="relative flex items-center">
+              <Search className="w-4 h-4 text-[#8a9282] absolute left-3.5 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search files and folders..."
+                className="w-full bg-[#f2f4ef] hover:bg-[#ebeee7] focus:bg-white text-sm text-[#1e2419] placeholder-[#8a9282] rounded-xl pl-10 pr-4 py-2 border border-transparent focus:border-[#4d602c] focus:outline-none transition"
+              />
+            </div>
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-3 flex-shrink-0">
-          {sessionId && !assistantOpen && (
-            <button onClick={() => openAssistantWith()} className="btn btn-secondary">
-              <PanelRight className="w-4 h-4" />
-              <span className="hidden sm:inline">Assistant</span>
-            </button>
-          )}
+        {/* Right Nav Actions */}
+        <div className="flex items-center gap-3">
+          <button className="w-9 h-9 rounded-full text-[#6b7362] hover:bg-[#f2f4ef] flex items-center justify-center transition" title="Help">
+            <HelpCircle className="w-5 h-5" />
+          </button>
+          <button className="w-9 h-9 rounded-full text-[#6b7362] hover:bg-[#f2f4ef] flex items-center justify-center transition" title="Settings">
+            <Settings className="w-5 h-5" />
+          </button>
+
+          {/* User Profile Pill */}
           {sessionId && userProfile && (
-            <>
-              <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setProfileMenu((v) => !v)}
+                className="flex items-center gap-2.5 pl-1.5 pr-2 py-1 rounded-full bg-white border border-[#e5e8e1] hover:border-[#4d602c] transition cursor-pointer"
+              >
                 {userProfile.photoLink ? (
-                  <img src={userProfile.photoLink} alt={userProfile.displayName} className="w-6 h-6 rounded-full" />
+                  <img src={userProfile.photoLink} alt={userProfile.displayName} className="w-7 h-7 rounded-full object-cover" />
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-hover text-ink-soft flex items-center justify-center text-xs font-semibold">
-                    {userProfile.displayName?.charAt(0) || 'U'}
+                  <div className="w-7 h-7 rounded-full bg-[#4d602c] text-white flex items-center justify-center text-xs font-semibold">
+                    {userProfile.displayName?.charAt(0) || 'D'}
                   </div>
                 )}
-                <span className="hidden md:inline text-[13px] text-ink-soft max-w-[160px] truncate">
-                  {userProfile.displayName || userProfile.emailAddress}
+                <span className="text-xs font-medium text-[#1e2419] max-w-[120px] truncate">
+                  {userProfile.displayName || 'User'}
                 </span>
-              </div>
-              <button onClick={handleLogout} className="text-[13px] text-ink-soft hover:text-ink cursor-pointer">
-                Sign out
+                <ChevronDown className="w-3.5 h-3.5 text-[#8a9282]" />
               </button>
-            </>
+
+              {profileMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setProfileMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-[#e5e8e1] rounded-2xl shadow-xl py-2 z-50 text-xs text-[#2c3327]">
+                    <div className="px-4 py-2 border-b border-[#f2f4ef]">
+                      <p className="font-semibold text-sm truncate">{userProfile.displayName}</p>
+                      <p className="text-[#8a9282] truncate">{userProfile.emailAddress}</p>
+                    </div>
+                    <button
+                      onClick={() => { setProfileMenu(false); handleLogout(); }}
+                      className="w-full text-left px-4 py-2 hover:bg-[#f7f8f6] transition text-[#2c3327]"
+                    >
+                      Sign Out
+                    </button>
+                    <button
+                      onClick={() => { setProfileMenu(false); setDeleteAccountModal(true); }}
+                      className="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-600 transition"
+                    >
+                      Delete Account & Data
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </header>
 
-      {/* Connection screen */}
+      {/* ================= MAIN CONTENT ================= */}
       {!sessionId ? (
-        <main className="flex-1 flex items-center justify-center p-6">
-          <div className="max-w-sm text-center">
-            <HardDrive className="w-8 h-8 text-ink-soft mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold mb-1">Smart Drive</h2>
-            <p className="text-[15px] font-medium mb-2">Connect Google Drive</p>
-            <p className="text-[13px] text-ink-soft leading-relaxed mb-6">
-              Smart Drive needs access to your Drive to organize files, find duplicates, and perform requested actions.
-            </p>
-            <button onClick={handleGoogleLogin} className="btn btn-primary !h-10 !px-5 !text-sm">
-              Connect Google Drive
-            </button>
-            <p className="text-xs text-ink-mute mt-4">You can disconnect your account at any time.</p>
-          </div>
-        </main>
-      ) : (
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-          {/* File manager */}
-          <main className="flex-1 min-w-0 min-h-[24rem] flex flex-col">
-            {/* Title + actions */}
-            <div className="px-6 pt-5 pb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-              <div className="min-w-0">
-                <nav className="flex items-center flex-wrap text-xl font-semibold">
-                  {folderHistory.map((folder, idx) => (
-                    <React.Fragment key={folder.id}>
-                      {idx > 0 && <ChevronRight className="w-4 h-4 text-ink-mute mx-1.5 flex-shrink-0" />}
-                      <button
-                        onClick={() => navigateBreadcrumb(idx)}
-                        className={`cursor-pointer hover:underline underline-offset-4 ${
-                          idx === folderHistory.length - 1 ? 'text-ink' : 'text-ink-soft font-medium'
-                        }`}
-                      >
-                        {folder.name}
-                      </button>
-                    </React.Fragment>
-                  ))}
-                </nav>
-                <p className="text-[13px] text-ink-mute mt-0.5">
-                  {loadingFiles
-                    ? 'Loading...'
-                    : search.trim()
-                      ? `${visibleFiles.length} of ${files.length} items`
-                      : `${files.length} item${files.length === 1 ? '' : 's'}`}
+        /* CONNECT GOOGLE DRIVE LANDING SCREEN */
+        <main className="flex-1 flex items-center justify-center p-8">
+          <div className="max-w-4xl w-full bg-white rounded-3xl border border-[#e5e8e1] shadow-xl p-10 lg:p-14 flex flex-col md:flex-row items-center gap-10">
+            {/* Illustration */}
+            <div className="flex-1 flex items-center justify-center relative">
+              <div className="w-64 h-64 rounded-full bg-[#f2f5ed] flex items-center justify-center relative">
+                <div className="w-36 h-28 bg-[#d8dfcb] rounded-2xl shadow-md flex items-center justify-center transform -rotate-3">
+                  <div className="w-16 h-10 bg-[#c5cfb3] rounded-t-xl absolute -top-3 left-4" />
+                </div>
+                <div className="w-14 h-14 bg-white rounded-2xl shadow-lg border border-[#e5e8e1] flex items-center justify-center absolute -bottom-2 -right-2">
+                  <img src="https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png" alt="Drive" className="w-8 h-8" />
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 space-y-6">
+              <div>
+                <h2 className="text-3xl font-bold text-[#1e2419] tracking-tight">Connect Google Drive</h2>
+                <p className="text-sm text-[#6b7362] mt-2 leading-relaxed">
+                  Smart Drive needs access to your Google Drive to organize files, find duplicates, and perform requested actions.
                 </p>
               </div>
 
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="flex items-start gap-2.5 text-xs text-[#6b7362]">
+                  <ShieldCheck className="w-4 h-4 text-[#4d602c] flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-[#1e2419] block">Secure access</strong>
+                    We only access the files you choose to work with.
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5 text-xs text-[#6b7362]">
+                  <FolderSync className="w-4 h-4 text-[#4d602c] flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-[#1e2419] block">Organize effortlessly</strong>
+                    Find duplicates, clean up files, and organize folders.
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button
+                  onClick={handleGoogleLogin}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-[#4d602c] hover:bg-[#3f4f24] text-white font-medium text-sm rounded-xl shadow-lg shadow-[#4d602c]/20 transition flex items-center justify-center gap-3 cursor-pointer"
+                >
+                  <img src="https://www.gstatic.com/images/branding/product/1x/googleg_32dp.png" alt="Google" className="w-5 h-5 bg-white p-0.5 rounded-full" />
+                  <span>Connect Google Drive</span>
+                </button>
+                <p className="text-[11px] text-[#8a9282] mt-3">You can disconnect your account at any time from settings.</p>
+              </div>
+            </div>
+          </div>
+        </main>
+      ) : (
+        /* 3-COLUMN DASHBOARD (SIDEBAR + FILE MANAGER + ASSISTANT) */
+        <div className="flex-1 flex overflow-hidden">
+          {/* ================= LEFT SIDEBAR ================= */}
+          <aside className="w-60 bg-white border-r border-[#e5e8e1] flex flex-col justify-between p-4 flex-shrink-0">
+            <div className="space-y-6">
+              {/* Primary Nav */}
+              <nav className="space-y-1">
+                {[
+                  { id: 'my-drive', label: 'My Drive', icon: HardDrive },
+                  { id: 'shared', label: 'Shared with me', icon: Users },
+                  { id: 'recent', label: 'Recent', icon: Clock },
+                  { id: 'starred', label: 'Starred', icon: Star },
+                  { id: 'trash', label: 'Trash', icon: Trash2 },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const active = selectedNav === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setSelectedNav(item.id)}
+                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+                        active
+                          ? 'bg-[#edf2e4] text-[#3d4d23] font-semibold'
+                          : 'text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419]'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {/* Tools Section */}
+              <div>
+                <p className="text-[10px] uppercase font-bold tracking-wider text-[#8a9282] px-3.5 mb-2">Tools</p>
+                <div className="space-y-1">
+                  <button
+                    onClick={handleScanDuplicates}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer"
+                  >
+                    <Copy className="w-4 h-4 text-[#7b8371]" />
+                    <span>Find duplicates</span>
+                  </button>
+                  <button
+                    onClick={() => setScheduleModal(true)}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4 text-[#7b8371]" />
+                    <span>Clean up</span>
+                  </button>
+                  <button
+                    onClick={() => setAssistantOpen(true)}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-[#4d602c]" />
+                    <span>Assistant</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Storage Progress */}
+            <div className="p-3 bg-[#f7f8f6] rounded-2xl border border-[#e5e8e1]">
+              <div className="flex items-center gap-2 text-xs font-medium text-[#3d4d23]">
+                <HardDrive className="w-4 h-4" />
+                <span>Storage</span>
+              </div>
+              <p className="text-[11px] text-[#8a9282] mt-1">2.4 GB used</p>
+            </div>
+          </aside>
+
+          {/* ================= MIDDLE: FILE MANAGER ================= */}
+          <main className="flex-1 flex flex-col bg-white overflow-hidden">
+            {/* Top Bar (Breadcrumbs + Actions) */}
+            <div className="px-6 py-4 border-b border-[#e5e8e1] flex items-center justify-between gap-4 flex-shrink-0">
+              {/* Breadcrumb Path */}
+              <nav className="flex items-center text-sm font-medium text-[#6b7362] truncate">
+                {folderHistory.map((folder, idx) => (
+                  <React.Fragment key={folder.id}>
+                    {idx > 0 && <ChevronRight className="w-4 h-4 mx-1.5 text-[#8a9282] flex-shrink-0" />}
+                    <button
+                      onClick={() => navigateBreadcrumb(idx)}
+                      className={`hover:text-[#1e2419] transition cursor-pointer ${
+                        idx === folderHistory.length - 1 ? 'font-bold text-[#1e2419]' : ''
+                      }`}
+                    >
+                      {folder.name}
+                    </button>
+                  </React.Fragment>
+                ))}
+              </nav>
+
+              {/* Action Buttons */}
               <div className="flex items-center gap-2">
-                <label className={`btn btn-primary ${uploading ? 'opacity-60' : ''}`}>
-                  <Plus className="w-4 h-4" />
+                {/* Upload Button */}
+                <label className="flex items-center gap-2 px-3.5 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white text-xs font-medium rounded-xl transition cursor-pointer shadow-sm">
+                  <Plus className="w-3.5 h-3.5" />
                   <span>{uploading ? 'Uploading...' : 'Upload'}</span>
                   <input
                     type="file"
                     multiple
                     className="hidden"
                     disabled={uploading}
-                    onChange={(e) => { handleFileUpload(Array.from(e.target.files)); e.target.value = ''; }}
+                    onChange={(e) => {
+                      handleFileUpload(Array.from(e.target.files));
+                      e.target.value = '';
+                    }}
                   />
                 </label>
 
+                {/* Organize Dropdown */}
                 <div className="relative">
-                  <button onClick={() => setOrganizeMenu((v) => !v)} className="btn btn-secondary">
-                    Organize
-                    <ChevronDown className="w-3.5 h-3.5 text-ink-mute" />
+                  <button
+                    onClick={() => setOrganizeMenu((v) => !v)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] text-[#2c3327] text-xs font-medium rounded-xl transition cursor-pointer"
+                  >
+                    <span>Organize</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-[#8a9282]" />
                   </button>
+
                   {organizeMenu && (
                     <>
                       <div className="fixed inset-0 z-30" onClick={() => setOrganizeMenu(false)} />
-                      <div className="menu absolute right-0 top-full mt-1 z-40">
-                        <button className="menu-item" onClick={() => { setOrganizeMenu(false); handleScanDuplicates(); }}>
-                          <Copy className="w-4 h-4 text-ink-mute" /> Find duplicates
+                      <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-[#e5e8e1] rounded-2xl shadow-xl py-2 z-40 text-xs text-[#2c3327]">
+                        <button
+                          onClick={() => { setOrganizeMenu(false); handleScanDuplicates(); }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
+                        >
+                          <Copy className="w-4 h-4 text-[#8a9282]" />
+                          <span>Find duplicates</span>
                         </button>
-                        <button className="menu-item" onClick={() => { setOrganizeMenu(false); setScheduleModal(true); }}>
-                          <Clock className="w-4 h-4 text-ink-mute" /> Clean up
+                        <button
+                          onClick={() => { setOrganizeMenu(false); setScheduleModal(true); }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
+                        >
+                          <Zap className="w-4 h-4 text-[#8a9282]" />
+                          <span>Schedule clean up</span>
                         </button>
-                        <button className="menu-item" onClick={() => { setOrganizeMenu(false); openAssistantWith(); }}>
-                          <FolderPlus className="w-4 h-4 text-ink-mute" /> Organize with Assistant
+                        <button
+                          onClick={() => { setOrganizeMenu(false); openAssistantWith(); }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
+                        >
+                          <Sparkles className="w-4 h-4 text-[#4d602c]" />
+                          <span>Ask Assistant to sort</span>
                         </button>
                       </div>
                     </>
                   )}
                 </div>
 
+                {/* Refresh */}
                 <button
                   onClick={() => fetchFiles(currentFolder)}
-                  className="btn btn-text"
+                  className="p-2 text-[#6b7362] hover:bg-[#f7f8f6] rounded-xl border border-[#e5e8e1] transition cursor-pointer"
                   title="Refresh folder"
                 >
-                  <RefreshCw className={`w-4 h-4 ${loadingFiles ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">Refresh</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingFiles ? 'animate-spin' : ''}`} />
                 </button>
+
+                {/* View Switchers */}
+                <div className="flex items-center border border-[#e5e8e1] rounded-xl p-0.5 bg-white">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`p-1.5 rounded-lg transition ${viewMode === 'list' ? 'bg-[#edf2e4] text-[#3d4d23]' : 'text-[#8a9282] hover:text-[#1e2419]'}`}
+                  >
+                    <List className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-[#edf2e4] text-[#3d4d23]' : 'text-[#8a9282] hover:text-[#1e2419]'}`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Undo notice */}
+            {/* Undo Notification Banner */}
             {undoMessage && (
-              <div className="mx-6 mb-2 px-3 py-2 border border-line bg-sub rounded-lg flex items-center justify-between gap-3 text-[13px]">
-                <span className="flex items-center gap-2 min-w-0 text-ink-soft">
-                  <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
-                  <span className="truncate">{undoMessage}</span>
+              <div className="mx-6 mt-3 px-4 py-2.5 bg-[#f2f6ea] border border-[#d2dec0] rounded-xl flex items-center justify-between text-xs text-[#3d4d23]">
+                <span className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-[#4d602c]" />
+                  <span>{undoMessage}</span>
                 </span>
                 {undoToken && (
-                  <button onClick={handleUndo} className="btn btn-secondary !h-7 flex-shrink-0">
+                  <button
+                    onClick={handleUndo}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-white border border-[#d2dec0] hover:bg-[#e4ebd8] rounded-lg font-medium transition cursor-pointer"
+                  >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    Undo
+                    Undo Action
                   </button>
                 )}
               </div>
             )}
 
-            {/* Table */}
+            {/* File Table / Grid Container */}
             <div
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={(e) => {
@@ -714,127 +769,355 @@ export default function App() {
                 setDragActive(false);
                 if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
               }}
-              className="relative flex-1 min-h-0 flex flex-col"
+              className="flex-1 overflow-y-auto px-6 py-2 relative"
             >
-              <div className="grid grid-cols-[1fr_5rem] sm:grid-cols-[1fr_6rem_6rem] items-center gap-3 px-6 h-9 border-y border-line bg-sub text-xs text-ink-soft font-medium flex-shrink-0">
-                <span>Name</span>
-                <span className="text-right">Size</span>
-                <span className="hidden sm:flex items-center justify-end relative">
-                  <button
-                    onClick={() => setSortMenu((v) => !v)}
-                    className="flex items-center gap-1 hover:text-ink cursor-pointer"
-                    title="Sort"
-                  >
-                    Modified
-                    <ArrowUpDown className="w-3 h-3" />
-                  </button>
-                  {sortMenu && (
-                    <>
-                      <div className="fixed inset-0 z-30" onClick={() => setSortMenu(false)} />
-                      <div className="menu absolute right-0 top-full mt-1 z-40 !min-w-[150px] font-normal">
-                        <p className="px-2.5 py-1 text-[11px] text-ink-mute">Sort by</p>
-                        {Object.entries(sortLabels).map(([key, label]) => (
-                          <button
-                            key={key}
-                            className="menu-item"
-                            onClick={() => { setSortKey(key); setSortMenu(false); }}
-                          >
-                            <span className={sortKey === key ? 'text-accent font-medium' : ''}>{label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </span>
-              </div>
+              {dragActive && (
+                <div className="absolute inset-4 bg-[#f2f6ea]/90 border-2 border-dashed border-[#4d602c] rounded-2xl flex flex-col items-center justify-center text-[#4d602c] font-semibold text-sm z-20">
+                  <Plus className="w-8 h-8 mb-2 animate-bounce" />
+                  Drop files to upload directly here
+                </div>
+              )}
 
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {dragActive && (
-                  <div className="sticky top-0 z-10 m-3 py-6 border border-dashed border-accent bg-accent-soft rounded-lg text-center text-[13px] text-accent pointer-events-none">
-                    Drop files to upload to this folder
-                  </div>
-                )}
-                {loadingFiles ? (
-                  <div className="flex items-center justify-center h-48 text-ink-mute text-[13px]">Loading...</div>
-                ) : visibleFiles.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-ink-mute text-[13px]">
-                    <Folder className="w-8 h-8 stroke-1 mb-2" />
-                    {search.trim() ? 'No files match your search.' : 'This folder is empty.'}
-                  </div>
-                ) : (
-                  visibleFiles.map((file) => (
-                    <div
-                      key={file.id}
-                      onClick={() => file.isFolder && navigateToFolder(file)}
-                      className={`group grid grid-cols-[1fr_5rem] sm:grid-cols-[1fr_6rem_6rem] items-center gap-3 px-6 h-10 border-b border-line hover:bg-hover ${
-                        file.isFolder ? 'cursor-pointer' : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {getFileIcon(file)}
-                        <span className="truncate text-[13px]">{file.name}</span>
-                        {file.webViewLink && (
-                          <a
-                            href={file.webViewLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="opacity-0 group-hover:opacity-100 text-ink-mute hover:text-ink flex-shrink-0"
-                            title="Open in Drive"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                      <span className="text-right text-xs text-ink-soft tabular-nums">
-                        {file.isFolder ? '' : formatSize(file.size)}
-                      </span>
-                      <span className="hidden sm:block text-right text-xs text-ink-soft">
-                        {formatDate(file.modifiedTime)}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
+              {loadingFiles ? (
+                <div className="h-64 flex items-center justify-center text-xs text-[#8a9282]">
+                  Loading files from Drive...
+                </div>
+              ) : visibleFiles.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-xs text-[#8a9282] gap-2">
+                  <Folder className="w-8 h-8 text-[#d8dfcb]" />
+                  <span>No files or folders found</span>
+                </div>
+              ) : (
+                /* Table View */
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#f0f2eb] text-[#8a9282] font-semibold">
+                      <th className="py-2.5 px-2 w-8">
+                        <input
+                          type="checkbox"
+                          checked={selectedFileIds.size === visibleFiles.length && visibleFiles.length > 0}
+                          onChange={toggleSelectAll}
+                          className="rounded text-[#4d602c] focus:ring-[#4d602c]"
+                        />
+                      </th>
+                      <th className="py-2.5 px-2">Name ↑</th>
+                      <th className="py-2.5 px-2 w-28">Size</th>
+                      <th className="py-2.5 px-2 w-32">Modified</th>
+                      <th className="py-2.5 px-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f7f8f6]">
+                    {visibleFiles.map((item) => {
+                      const isSelected = selectedFileIds.has(item.id);
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={() => item.isFolder && navigateToFolder(item)}
+                          className={`hover:bg-[#f7f8f6] transition group cursor-pointer ${
+                            isSelected ? 'bg-[#edf2e4]' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectFile(item.id)}
+                              className="rounded text-[#4d602c] focus:ring-[#4d602c]"
+                            />
+                          </td>
+                          <td className="py-3 px-2">
+                            <div className="flex items-center gap-3">
+                              {getFileIcon(item)}
+                              <span className="font-medium text-[#1e2419] truncate max-w-md group-hover:text-[#4d602c] transition">
+                                {item.name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 text-[#8a9282]">{formatSize(item.size)}</td>
+                          <td className="py-3 px-2 text-[#8a9282]">{formatDate(item.modifiedTime)}</td>
+                          <td className="py-3 px-2 text-right">
+                            {item.webViewLink && (
+                              <a
+                                href={item.webViewLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[#8a9282] hover:text-[#4d602c] p-1 inline-block"
+                                title="Open in Google Drive"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </main>
 
-          {assistantOpen && assistantPanel}
+          {/* ================= RIGHT: ASSISTANT PANEL ================= */}
+          {assistantOpen && (
+            <aside className="w-80 bg-white border-l border-[#e5e8e1] flex flex-col flex-shrink-0">
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-[#e5e8e1] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#4d602c]" />
+                  <h3 className="font-semibold text-sm text-[#1e2419]">Assistant</h3>
+                </div>
+                <button
+                  onClick={() => setAssistantOpen(false)}
+                  className="p-1 rounded-lg text-[#8a9282] hover:bg-[#f2f4ef] transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Tabs: Suggestions vs Activity */}
+              <div className="flex border-b border-[#e5e8e1] px-5 text-xs font-semibold">
+                <button
+                  onClick={() => setActiveTab('suggestions')}
+                  className={`py-3 mr-4 transition relative cursor-pointer ${
+                    activeTab === 'suggestions' ? 'text-[#4d602c]' : 'text-[#8a9282] hover:text-[#1e2419]'
+                  }`}
+                >
+                  Suggestions
+                  {activeTab === 'suggestions' && <div className="h-0.5 bg-[#4d602c] absolute bottom-0 left-0 right-0" />}
+                </button>
+                <button
+                  onClick={() => setActiveTab('activity')}
+                  className={`py-3 transition relative cursor-pointer ${
+                    activeTab === 'activity' ? 'text-[#4d602c]' : 'text-[#8a9282] hover:text-[#1e2419]'
+                  }`}
+                >
+                  Activity
+                  {chatLog.length > 0 && <span className="ml-1 px-1.5 py-0.2 bg-[#4d602c] text-white rounded-full text-[9px]">{chatLog.length}</span>}
+                  {activeTab === 'activity' && <div className="h-0.5 bg-[#4d602c] absolute bottom-0 left-0 right-0" />}
+                </button>
+              </div>
+
+              {/* Panel Body */}
+              <div className="flex-1 overflow-y-auto p-5 text-xs space-y-4">
+                {activeTab === 'suggestions' ? (
+                  <div>
+                    <p className="font-semibold text-[#1e2419] mb-3 text-xs">What would you like to do?</p>
+                    <div className="space-y-2">
+                      {suggestions.map((item, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => openAssistantWith(item.text)}
+                          className="w-full flex items-center justify-between p-3 rounded-xl border border-[#e5e8e1] hover:border-[#4d602c] hover:bg-[#f7f8f6] transition text-left group cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5 text-[#2c3327]">
+                            <span className="p-1.5 rounded-lg bg-[#f2f5ed] text-[#4d602c] group-hover:bg-[#4d602c] group-hover:text-white transition">
+                              <Sparkles className="w-3.5 h-3.5" />
+                            </span>
+                            <span className="font-medium">{item.text}</span>
+                          </div>
+                          <ChevronRight className="w-3.5 h-3.5 text-[#8a9282] group-hover:text-[#4d602c]" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Activity / Chat Log */
+                  <div className="space-y-3">
+                    {chatLog.length === 0 ? (
+                      <p className="text-center text-[#8a9282] py-8">No conversation yet. Ask a question below!</p>
+                    ) : (
+                      chatLog.map((msg, i) => (
+                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div
+                            className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 leading-relaxed whitespace-pre-wrap ${
+                              msg.role === 'user'
+                                ? 'bg-[#4d602c] text-white'
+                                : 'bg-[#f7f8f6] border border-[#e5e8e1] text-[#1e2419]'
+                            }`}
+                          >
+                            {msg.text}
+                          </div>
+                        </div>
+                      ))
+                    )}
+
+                    {analyzing && (
+                      <div className="flex items-center gap-2 text-[#8a9282] italic bg-[#f7f8f6] p-3 rounded-xl">
+                        <Sparkles className="w-3.5 h-3.5 text-[#4d602c] animate-spin" />
+                        <span>Analyzing files & planning...</span>
+                      </div>
+                    )}
+
+                    {/* Proposed Plan Review Card */}
+                    {proposedPlan && (
+                      <div className="bg-[#fcfdfa] border-2 border-[#4d602c] rounded-2xl p-3.5 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#4d602c] flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Proposed Plan
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-[#edf2e4] text-[#3d4d23] font-semibold text-[10px]">
+                            {proposedPlan.operations.length} actions
+                          </span>
+                        </div>
+
+                        <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                          {proposedPlan.operations.map((op) => (
+                            <div key={op.id} className="p-2 bg-white rounded-lg border border-[#e5e8e1] text-[11px]">
+                              {op.type === 'CREATE_FOLDER' && (
+                                <p className="font-medium text-amber-700">Create folder: {op.folder_name}</p>
+                              )}
+                              {op.type === 'MOVE_FILE' && (
+                                <p className="text-[#1e2419]">
+                                  Move <strong>{op.file_name}</strong> &rarr; <span className="text-[#4d602c] font-medium">{op.target_folder_name}</span>
+                                </p>
+                              )}
+                              {op.reason && <p className="text-[10px] text-[#8a9282] italic mt-0.5">{op.reason}</p>}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={handleExecutePlan}
+                            disabled={executing}
+                            className="flex-1 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl font-medium transition cursor-pointer text-xs"
+                          >
+                            {executing ? 'Executing...' : 'Approve & Execute'}
+                          </button>
+                          <button
+                            onClick={() => setProposedPlan(null)}
+                            disabled={executing}
+                            className="px-3 py-2 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] rounded-xl text-[#6b7362] cursor-pointer text-xs"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+                )}
+              </div>
+
+              {/* Chat Input Bar */}
+              <div className="p-4 border-t border-[#e5e8e1]">
+                <form onSubmit={handleSendMessage} className="relative">
+                  <div className="border border-[#e5e8e1] focus-within:border-[#4d602c] rounded-2xl bg-[#fcfdfa] p-2 transition">
+                    <textarea
+                      ref={promptInputRef}
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage(e);
+                        }
+                      }}
+                      placeholder="Ask or describe what you want to do..."
+                      rows={2}
+                      className="w-full bg-transparent text-xs text-[#1e2419] placeholder-[#8a9282] resize-none outline-none"
+                    />
+
+                    <div className="flex items-center justify-between pt-1 border-t border-[#f2f4ef]">
+                      {/* Left: Attach & Mic */}
+                      <div className="flex items-center gap-1">
+                        <label className="p-1 text-[#8a9282] hover:text-[#1e2419] rounded cursor-pointer" title="Attach file to upload">
+                          <Paperclip className="w-3.5 h-3.5" />
+                          <input
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              handleFileUpload(Array.from(e.target.files));
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={toggleVoiceInput}
+                          className={`p-1 rounded cursor-pointer ${
+                            isListening ? 'text-rose-600 bg-rose-50 animate-pulse' : 'text-[#8a9282] hover:text-[#1e2419]'
+                          }`}
+                          title="Speak command"
+                        >
+                          {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+
+                      {/* Right: Send */}
+                      <button
+                        type="submit"
+                        disabled={!prompt.trim() || analyzing}
+                        className="w-7 h-7 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-lg flex items-center justify-center disabled:opacity-40 transition cursor-pointer shadow-sm"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                {/* Example Quick Pills */}
+                <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto text-[10px]">
+                  <span className="text-[#8a9282] font-semibold flex-shrink-0">Examples:</span>
+                  {['Find large files', 'Organize PDFs', 'Move files'].map((pill) => (
+                    <button
+                      key={pill}
+                      onClick={() => openAssistantWith(pill)}
+                      className="px-2 py-0.5 bg-[#f2f5ed] hover:bg-[#e4ebdb] text-[#4d602c] rounded-md whitespace-nowrap transition cursor-pointer"
+                    >
+                      {pill}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </aside>
+          )}
         </div>
       )}
 
+      {/* ================= MODALS ================= */}
+
       {/* Duplicates Modal */}
       {duplicatesModal && (
-        <div className={modalShell}>
-          <div className={`${modalCard} max-w-lg flex flex-col max-h-[80vh]`}>
-            <div className="flex items-center justify-between pb-3 border-b border-line">
-              <h3 className="font-semibold text-base">Duplicate files</h3>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-[#e5e8e1] rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-[#f0f2eb]">
+              <div className="flex items-center gap-2 text-[#4d602c]">
+                <Copy className="w-5 h-5" />
+                <h3 className="font-bold text-base text-[#1e2419]">Duplicate Files Detection</h3>
+              </div>
               <button
                 onClick={() => setDuplicatesModal(false)}
-                className="p-1.5 rounded-md text-ink-mute hover:bg-hover hover:text-ink cursor-pointer"
-                title="Close"
+                className="text-[#8a9282] hover:text-[#1e2419] text-xs px-2.5 py-1 rounded-lg bg-[#f7f8f6] cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                ✕ Close
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-3">
+            <div className="flex-1 overflow-y-auto py-4 space-y-3">
               {scanningDuplicates ? (
-                <p className="text-center py-8 text-ink-mute text-[13px]">Comparing checksums...</p>
+                <div className="text-center py-8 text-[#8a9282] text-xs animate-pulse">
+                  Comparing MD5 checksums and file sizes...
+                </div>
               ) : duplicateList.length === 0 ? (
-                <p className="text-center py-8 text-ink-soft text-[13px]">No duplicate files found in this folder.</p>
+                <div className="text-center py-8 text-[#4d602c] text-xs font-medium">
+                  🎉 No duplicate files found in this folder!
+                </div>
               ) : (
                 duplicateList.map((item, idx) => (
-                  <div key={idx} className="py-2.5 border-b border-line last:border-b-0 text-[13px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-medium">{item.primary.name}</span>
-                      <span className="text-xs text-ink-mute flex-shrink-0">Original</span>
+                  <div key={idx} className="bg-[#fcfdfa] p-3 rounded-xl border border-[#e5e8e1] text-xs space-y-2">
+                    <div className="text-[#1e2419] font-medium flex items-center justify-between">
+                      <span className="truncate">Original: <strong>{item.primary.name}</strong></span>
+                      <span className="text-[#8a9282] font-mono text-[10px]">MD5 match</span>
                     </div>
-                    <div className="mt-1 pl-3 border-l border-line space-y-0.5">
+                    <div className="pl-3 border-l-2 border-[#4d602c]/40 space-y-1">
                       {item.duplicates.map((dup) => (
-                        <div key={dup.id} className="flex items-center justify-between gap-2 text-ink-soft">
-                          <span className="truncate">{dup.name}</span>
-                          <span className="text-xs text-ink-mute flex-shrink-0">{formatSize(dup.size)}</span>
+                        <div key={dup.id} className="text-[#4d602c] flex items-center justify-between">
+                          <span className="truncate">Duplicate: {dup.name}</span>
+                          <span className="text-[10px] text-[#8a9282]">{(dup.size / 1024).toFixed(1)} KB</span>
                         </div>
                       ))}
                     </div>
@@ -843,58 +1126,124 @@ export default function App() {
               )}
             </div>
 
-            <div className="pt-3 border-t border-line flex justify-end">
-              <button onClick={() => setDuplicatesModal(false)} className="btn btn-secondary">Close</button>
+            <div className="pt-3 border-t border-[#f0f2eb] flex justify-end">
+              <button
+                onClick={() => setDuplicatesModal(false)}
+                className="px-4 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white text-xs rounded-xl font-medium cursor-pointer"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Clean up (schedule) Modal */}
+      {/* Auto-Clean Schedule Modal */}
       {scheduleModal && (
-        <div className={modalShell}>
-          <div className={`${modalCard} max-w-md`}>
-            <div className="flex items-center justify-between pb-3 border-b border-line">
-              <h3 className="font-semibold text-base">Clean up</h3>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-[#e5e8e1] rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-[#f0f2eb]">
+              <div className="flex items-center gap-2 text-[#4d602c]">
+                <Clock className="w-5 h-5" />
+                <h3 className="font-bold text-base text-[#1e2419]">Schedule Auto-Clean</h3>
+              </div>
               <button
                 onClick={() => setScheduleModal(false)}
-                className="p-1.5 rounded-md text-ink-mute hover:bg-hover hover:text-ink cursor-pointer"
-                title="Close"
+                className="text-[#8a9282] hover:text-[#1e2419] text-xs px-2.5 py-1 rounded-lg bg-[#f7f8f6] cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                ✕ Close
               </button>
             </div>
 
-            <form onSubmit={handleSaveSchedule} className="pt-4 space-y-4 text-[13px]">
+            <form onSubmit={handleSaveSchedule} className="py-4 space-y-4 text-xs">
               <div>
-                <label className="block text-ink-soft mb-1">Frequency</label>
-                <select value={scheduleCron} onChange={(e) => setScheduleCron(e.target.value)} className="field">
+                <label className="block text-[#6b7362] mb-1 font-medium">Frequency</label>
+                <select
+                  value={scheduleCron}
+                  onChange={(e) => setScheduleCron(e.target.value)}
+                  className="w-full bg-[#fcfdfa] border border-[#e5e8e1] rounded-xl p-2.5 text-[#1e2419] outline-none"
+                >
                   <option value="every_friday">Every Friday at 5:00 PM</option>
-                  <option value="every_day">Daily at midnight</option>
-                  <option value="every_hour">Hourly</option>
+                  <option value="every_day">Daily at Midnight (12:00 AM)</option>
+                  <option value="every_hour">Hourly Maintenance Sweep</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-ink-soft mb-1">Archive folder</label>
+                <label className="block text-[#6b7362] mb-1 font-medium">Target Archive Folder</label>
                 <input
                   type="text"
                   value={scheduleFolder}
                   onChange={(e) => setScheduleFolder(e.target.value)}
                   placeholder="e.g. Weekly Archive"
-                  className="field"
+                  className="w-full bg-[#fcfdfa] border border-[#e5e8e1] rounded-xl p-2.5 text-[#1e2419] outline-none"
                 />
               </div>
 
-              <p className="text-xs text-ink-mute leading-relaxed">
-                Files left loose in My Drive are moved into this folder on the schedule above.
-              </p>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setScheduleModal(false)} className="btn btn-secondary">Cancel</button>
-                <button type="submit" className="btn btn-primary">Save schedule</button>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScheduleModal(false)}
+                  className="px-4 py-2 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] rounded-xl text-[#6b7362] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl font-medium cursor-pointer"
+                >
+                  Activate Schedule
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Modal */}
+      {deleteAccountModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-rose-100 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-3 pb-3 border-b border-rose-100 text-rose-600">
+              <div className="p-2 bg-rose-50 rounded-xl text-rose-500">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-[#1e2419]">Delete Account & Data</h3>
+                <p className="text-xs text-[#8a9282]">Permanent account disconnection</p>
+              </div>
+            </div>
+
+            <div className="py-4 space-y-3 text-xs text-[#6b7362] leading-relaxed">
+              <p>Are you sure you want to delete your account? This action will:</p>
+              <ul className="list-disc pl-5 space-y-1 text-[#1e2419]">
+                <li>Revoke Google OAuth token immediately</li>
+                <li>Wipe user session and undo history from storage</li>
+                <li>Log you out completely</li>
+              </ul>
+              <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-xl text-rose-700 text-[11px]">
+                Your files in Google Drive will remain safe and untouched.
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#f0f2eb] flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={deletingAccount}
+                onClick={() => setDeleteAccountModal(false)}
+                className="px-4 py-2 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] rounded-xl text-[#6b7362] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingAccount}
+                onClick={handleDeleteAccount}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-medium cursor-pointer transition disabled:opacity-50"
+              >
+                {deletingAccount ? 'Deleting...' : 'Yes, Delete My Account'}
+              </button>
+            </div>
           </div>
         </div>
       )}
