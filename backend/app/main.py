@@ -244,8 +244,13 @@ def chat_with_agent(req: ChatRequest, session_id: str = Query(...)):
         return plan
     except Exception as e:
         print(f"Error in chat_with_agent: {e}")
+        err_msg = str(e)
+        if "404" in err_msg or "not found" in err_msg.lower():
+            explanation = "I searched your Google Drive but did not find any matching files for that request. Let me know if you would like me to create a folder or help organize existing files."
+        else:
+            explanation = f"Notice: {err_msg.splitlines()[0]}"
         return PlanResponse(
-            explanation=f"Notice: {str(e)}",
+            explanation=explanation,
             operations=[]
         )
 

@@ -20,9 +20,21 @@ class DriveAgent:
         # 1. Fetch current context: files in root / current folder
         current_files = self.drive.list_files_in_folder(folder_id=current_folder_id, page_size=60)
         
+        # If user asks about the whole drive, images, or searching, include search results
+        query_lower = user_prompt.lower()
+        if any(w in query_lower for w in ["whole drive", "entire drive", "all drive", "any image", "search", "where", "find"]):
+            try:
+                extra_files = self.drive.search_files(text_query="", page_size=50)
+                existing_ids = {f["id"] for f in current_files}
+                for ef in extra_files:
+                    if ef["id"] not in existing_ids:
+                        current_files.append(ef)
+            except Exception:
+                pass
+
         # 2. Extract content snippets for documents to enable deep content-aware sorting
         files_with_context = []
-        for f in current_files[:30]:
+        for f in current_files[:40]:
             snippet = ""
             if not f["isFolder"]:
                 snippet = self.drive.get_file_content_snippet(f["id"], f["mimeType"], max_chars=400)
@@ -38,7 +50,7 @@ class DriveAgent:
         # 3. System Prompt instructing Gemini with full suite of actions
         system_instruction = (
             "You are Smart Drive Assistant, an autonomous Google Drive file manager with deep content inspection.\n"
-            "You can analyze file contents (PDFs, Docs, Sheets), identify duplicates, and execute organization plans.\n"
+            "You can analyze file contents (PDFs, Docs, Sheets, images), answer questions about files, identify duplicates, and execute organization plans.\n"
             "Supported operation types:\n"
             "- 'CREATE_FOLDER': { folder_name, parent_id, reason }\n"
             "- 'MOVE_FILE': { file_id, file_name, source_folder_id, target_folder_name, reason }\n"
@@ -48,7 +60,7 @@ class DriveAgent:
             "- 'EXPORT_PDF': { file_id, file_name, reason }\n\n"
             "Format your response as valid JSON matching this schema:\n"
             "{\n"
-            '  "explanation": "Clear summary of the organization plan and insights from document contents",\n'
+            '  "explanation": "Clear summary of the organization plan or conversational answer to user question",\n'
             '  "operations": [\n'
             '    {\n'
             '      "id": "unique-uuid-str",\n'
@@ -58,9 +70,9 @@ class DriveAgent:
             '  ]\n'
             "}\n"
             "Rules:\n"
-            "1. Inspect 'content_preview' to understand what each document actually is (e.g. invoice, resume, receipt, report) and categorize accordingly.\n"
-            "2. If creating a new folder, include the CREATE_FOLDER operation before MOVE_FILE operations targeting it.\n"
-            "3. If user asks to share a file, include SHARE_FILE.\n"
+            "1. Inspect 'content_preview' and 'available_files' to understand what each document actually is.\n"
+            "2. If user asks a question (e.g. 'Is there any image in my whole drive?'), check available_files and answer clearly in 'explanation'. If no move/create actions are needed, return operations as empty [].\n"
+            "3. If creating a new folder, include CREATE_FOLDER before MOVE_FILE operations targeting it.\n"
             "4. Return ONLY raw JSON without markdown code fences."
         )
 
@@ -70,8 +82,8 @@ class DriveAgent:
             "available_files": files_with_context
         }
 
-        # Google API requires gemini-3.8-flash
-        models_to_try = ["gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        # Supported modern Gemini models
+        models_to_try = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]
         response = None
         last_err = None
 

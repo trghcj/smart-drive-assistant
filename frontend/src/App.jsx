@@ -61,6 +61,8 @@ export default function App() {
 
   // Assistant & Chat state
   const [assistantOpen, setAssistantOpen] = useState(true);
+  const [assistantWidth, setAssistantWidth] = useState(380);
+  const [isResizing, setIsResizing] = useState(false);
   const [activeTab, setActiveTab] = useState('suggestions'); // 'suggestions' or 'activity'
   const [prompt, setPrompt] = useState('');
   const [chatLog, setChatLog] = useState([]);
@@ -95,6 +97,38 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [chatLog, analyzing, proposedPlan]);
+
+  // Drag-to-resize listener for My Drive & Assistant split
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 280 && newWidth <= Math.min(800, window.innerWidth - 320)) {
+        setAssistantWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
 
   // Read session_id from URL query params on load
   useEffect(() => {
@@ -557,13 +591,6 @@ export default function App() {
 
         {/* Right Nav Actions */}
         <div className="flex items-center gap-3">
-          <button className="w-9 h-9 rounded-full text-[#6b7362] hover:bg-[#f2f4ef] flex items-center justify-center transition" title="Help">
-            <HelpCircle className="w-5 h-5" />
-          </button>
-          <button className="w-9 h-9 rounded-full text-[#6b7362] hover:bg-[#f2f4ef] flex items-center justify-center transition" title="Settings">
-            <Settings className="w-5 h-5" />
-          </button>
-
           {/* User Profile Pill */}
           {sessionId && userProfile && (
             <div className="relative">
@@ -1134,9 +1161,32 @@ export default function App() {
             </div>
           </main>
 
+          {/* Draggable Divider between My Drive and Assistant */}
+          {assistantOpen && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizing(true);
+              }}
+              className={`w-2 -ml-1 z-20 cursor-col-resize transition-all flex items-center justify-center select-none group relative ${
+                isResizing ? 'bg-[#4d602c]' : 'bg-transparent hover:bg-[#4d602c]/20'
+              }`}
+              title="Drag left or right to resize My Drive & Assistant"
+            >
+              <div
+                className={`w-0.5 h-10 rounded-full transition-colors ${
+                  isResizing ? 'bg-white' : 'bg-[#c5cfb3] group-hover:bg-[#4d602c]'
+                }`}
+              />
+            </div>
+          )}
+
           {/* ================= RIGHT: ASSISTANT PANEL ================= */}
           {assistantOpen && (
-            <aside className="w-80 md:w-96 bg-white border-l border-[#e5e8e1] flex flex-col flex-shrink-0 h-full overflow-hidden">
+            <aside
+              style={{ width: `${assistantWidth}px` }}
+              className="bg-white border-l border-[#e5e8e1] flex flex-col flex-shrink-0 h-full overflow-hidden"
+            >
               {/* Header */}
               <div className="px-5 py-4 border-b border-[#e5e8e1] flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2">
