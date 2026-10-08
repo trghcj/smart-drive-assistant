@@ -65,6 +65,8 @@ export default function App() {
   const [scheduleFolder, setScheduleFolder] = useState('Weekly Archive');
   const [scheduleNotice, setScheduleNotice] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [deleteAccountModal, setDeleteAccountModal] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -106,6 +108,19 @@ export default function App() {
     setSessionId(null);
     setUserProfile(null);
     localStorage.removeItem('drive_session_id');
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await axios.post(`${API_BASE}/auth/delete-account?session_id=${sessionId}`);
+    } catch (err) {
+      console.error('Delete account error:', err);
+    } finally {
+      setDeletingAccount(false);
+      setDeleteAccountModal(false);
+      handleLogout();
+    }
   };
 
   const fetchUserProfile = async () => {
@@ -360,9 +375,18 @@ export default function App() {
             </div>
             <button
               onClick={handleLogout}
-              className="text-xs font-medium text-ink-soft hover:text-rose-600 transition cursor-pointer"
+              className="text-xs font-medium text-ink-soft hover:text-ink transition cursor-pointer"
             >
               Sign Out
+            </button>
+            <span className="text-moss-200 text-xs">|</span>
+            <button
+              onClick={() => setDeleteAccountModal(true)}
+              className="text-xs font-medium text-rose-500 hover:text-rose-700 hover:underline transition cursor-pointer flex items-center gap-1"
+              title="Delete account & disconnect Drive completely"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Account</span>
             </button>
           </div>
         ) : (
@@ -825,6 +849,57 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Confirmation Modal */}
+      {deleteAccountModal && (
+        <div className={modalShell}>
+          <div className={`${modalCard} max-w-md`}>
+            <div className="flex items-center gap-3 pb-3 border-b border-rose-100 text-rose-600">
+              <div className="p-2 bg-rose-50 rounded-xl text-rose-500">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-ink">Delete Account & Data</h3>
+                <p className="text-xs text-ink-soft">Permanent account disconnection</p>
+              </div>
+            </div>
+
+            <div className="py-4 space-y-3 text-xs text-ink-soft leading-relaxed">
+              <p>
+                Are you sure you want to delete your account? This action will:
+              </p>
+              <ul className="list-disc pl-5 space-y-1.5 text-ink">
+                <li><strong>Revoke Google OAuth Access:</strong> Disconnect Smart Drive Assistant from your Google account immediately.</li>
+                <li><strong>Purge All Stored Data:</strong> Permanently delete your user profile, session tokens, and undo history from our database and disk.</li>
+                <li><strong>Log You Out Completely:</strong> Clear all local browser storage and return to the login screen.</li>
+              </ul>
+              <div className="bg-rose-50 border border-rose-200/80 p-3 rounded-xl text-rose-700 text-[11px]">
+                ⚠️ Your files in Google Drive will remain safe and untouched, but Smart Drive Assistant will no longer have permission to access them.
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-moss-100 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={deletingAccount}
+                onClick={() => setDeleteAccountModal(false)}
+                className="btn-ghost px-4 py-2 rounded-lg font-medium cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingAccount}
+                onClick={handleDeleteAccount}
+                className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium cursor-pointer shadow-lg shadow-rose-600/20 transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deletingAccount ? 'Deleting...' : 'Yes, Delete My Account'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

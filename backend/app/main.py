@@ -144,6 +144,35 @@ def get_current_user(session_id: str = Query(...)):
         "quota": about.get("storageQuota", {})
     }
 
+import requests
+
+@app.post("/api/auth/delete-account")
+def delete_account(session_id: str = Query(...)):
+    """
+    Permanently delete account:
+    1. Revoke the OAuth access token with Google's revocation endpoint.
+    2. Wipe the session and all credentials from disk database/storage.
+    """
+    if session_id in USER_SESSIONS:
+        token = USER_SESSIONS[session_id].get("access_token")
+        # Attempt to revoke token with Google
+        if token:
+            try:
+                requests.post(
+                    "https://oauth2.googleapis.com/revoke",
+                    params={"token": token},
+                    headers={"content-type": "application/x-www-form-urlencoded"},
+                    timeout=5
+                )
+            except Exception as e:
+                print(f"Token revocation error (non-fatal): {e}")
+
+        # Delete from persistent storage
+        del USER_SESSIONS[session_id]
+        save_data(SESSIONS_FILE, USER_SESSIONS)
+
+    return {"success": True, "message": "Account and all session data permanently deleted."}
+
 # ----------------- DRIVE EXPLORER ROUTES -----------------
 
 @app.get("/api/drive/files")
