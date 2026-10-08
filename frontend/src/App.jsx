@@ -417,9 +417,9 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f7f8f6] text-[#2c3327] font-sans flex flex-col antialiased">
+    <div className="h-screen w-screen overflow-hidden bg-[#f7f8f6] text-[#2c3327] font-sans flex flex-col antialiased">
       {/* ================= TOP NAVBAR ================= */}
-      <header className="h-16 px-6 bg-white border-b border-[#e5e8e1] flex items-center justify-between gap-4 sticky top-0 z-30">
+      <header className="h-16 px-6 bg-white border-b border-[#e5e8e1] flex items-center justify-between gap-4 flex-shrink-0 z-30">
         {/* Brand */}
         <div className="flex items-center gap-2.5 min-w-[200px]">
           <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm">
@@ -506,7 +506,7 @@ export default function App() {
       {/* ================= MAIN CONTENT ================= */}
       {!sessionId ? (
         /* CONNECT GOOGLE DRIVE LANDING SCREEN */
-        <main className="flex-1 flex items-center justify-center p-8">
+        <main className="flex-1 min-h-0 overflow-y-auto flex items-center justify-center p-8">
           <div className="max-w-4xl w-full bg-white rounded-3xl border border-[#e5e8e1] shadow-xl p-10 lg:p-14 flex flex-col md:flex-row items-center gap-10">
             {/* Illustration */}
             <div className="flex-1 flex items-center justify-center relative">
@@ -561,9 +561,9 @@ export default function App() {
         </main>
       ) : (
         /* 3-COLUMN DASHBOARD (SIDEBAR + FILE MANAGER + ASSISTANT) */
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 min-h-0 flex overflow-hidden">
           {/* ================= LEFT SIDEBAR ================= */}
-          <aside className="w-60 bg-white border-r border-[#e5e8e1] flex flex-col justify-between p-4 flex-shrink-0">
+          <aside className="w-60 bg-white border-r border-[#e5e8e1] flex flex-col justify-between p-4 flex-shrink-0 h-full overflow-y-auto">
             <div className="space-y-6">
               {/* Primary Nav */}
               <nav className="space-y-1">
@@ -633,7 +633,7 @@ export default function App() {
           </aside>
 
           {/* ================= MIDDLE: FILE MANAGER ================= */}
-          <main className="flex-1 flex flex-col bg-white overflow-hidden">
+          <main className="flex-1 min-w-0 flex flex-col bg-white h-full overflow-hidden">
             {/* Top Bar (Breadcrumbs + Actions) */}
             <div className="px-6 py-4 border-b border-[#e5e8e1] flex items-center justify-between gap-4 flex-shrink-0">
               {/* Breadcrumb Path */}
@@ -740,7 +740,7 @@ export default function App() {
 
             {/* Undo Notification Banner */}
             {undoMessage && (
-              <div className="mx-6 mt-3 px-4 py-2.5 bg-[#f2f6ea] border border-[#d2dec0] rounded-xl flex items-center justify-between text-xs text-[#3d4d23]">
+              <div className="mx-6 mt-3 px-4 py-2.5 bg-[#f2f6ea] border border-[#d2dec0] rounded-xl flex items-center justify-between text-xs text-[#3d4d23] flex-shrink-0">
                 <span className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-[#4d602c]" />
                   <span>{undoMessage}</span>
@@ -769,7 +769,7 @@ export default function App() {
                 setDragActive(false);
                 if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
               }}
-              className="flex-1 overflow-y-auto px-6 py-2 relative"
+              className="flex-1 min-h-0 overflow-y-auto px-6 py-2 relative"
             >
               {dragActive && (
                 <div className="absolute inset-4 bg-[#f2f6ea]/90 border-2 border-dashed border-[#4d602c] rounded-2xl flex flex-col items-center justify-center text-[#4d602c] font-semibold text-sm z-20">
@@ -787,10 +787,63 @@ export default function App() {
                   <Folder className="w-8 h-8 text-[#d8dfcb]" />
                   <span>No files or folders found</span>
                 </div>
+              ) : viewMode === 'grid' ? (
+                /* Grid View */
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 py-3">
+                  {visibleFiles.map((item) => {
+                    const isSelected = selectedFileIds.has(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => item.isFolder && navigateToFolder(item)}
+                        className={`group relative p-3 rounded-2xl border transition cursor-pointer flex flex-col justify-between aspect-square ${
+                          isSelected
+                            ? 'bg-[#edf2e4] border-[#4d602c]'
+                            : 'bg-white border-[#e5e8e1] hover:border-[#4d602c]/50 hover:bg-[#fbfcf9]'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectFile(item.id)}
+                              className="rounded text-[#4d602c] focus:ring-[#4d602c]"
+                            />
+                          </div>
+                          {item.webViewLink && (
+                            <a
+                              href={item.webViewLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[#8a9282] hover:text-[#4d602c] p-1 opacity-0 group-hover:opacity-100 transition"
+                              title="Open in Drive"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col items-center justify-center py-2 text-center">
+                          <div className="mb-2 scale-125">{getFileIcon(item)}</div>
+                          <span className="font-medium text-xs text-[#1e2419] truncate w-full group-hover:text-[#4d602c]">
+                            {item.name}
+                          </span>
+                        </div>
+
+                        <div className="text-[10px] text-[#8a9282] flex items-center justify-between pt-1 border-t border-[#f2f4ef]">
+                          <span>{formatSize(item.size)}</span>
+                          <span>{formatDate(item.modifiedTime)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 /* Table View */
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead>
+                  <thead className="sticky top-0 bg-white z-10 border-b border-[#f0f2eb]">
                     <tr className="border-b border-[#f0f2eb] text-[#8a9282] font-semibold">
                       <th className="py-2.5 px-2 w-8">
                         <input
@@ -860,9 +913,9 @@ export default function App() {
 
           {/* ================= RIGHT: ASSISTANT PANEL ================= */}
           {assistantOpen && (
-            <aside className="w-80 bg-white border-l border-[#e5e8e1] flex flex-col flex-shrink-0">
+            <aside className="w-80 md:w-96 bg-white border-l border-[#e5e8e1] flex flex-col flex-shrink-0 h-full overflow-hidden">
               {/* Header */}
-              <div className="px-5 py-4 border-b border-[#e5e8e1] flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-[#e5e8e1] flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#4d602c]" />
                   <h3 className="font-semibold text-sm text-[#1e2419]">Assistant</h3>
@@ -876,7 +929,7 @@ export default function App() {
               </div>
 
               {/* Tabs: Suggestions vs Activity */}
-              <div className="flex border-b border-[#e5e8e1] px-5 text-xs font-semibold">
+              <div className="flex border-b border-[#e5e8e1] px-5 text-xs font-semibold flex-shrink-0">
                 <button
                   onClick={() => setActiveTab('suggestions')}
                   className={`py-3 mr-4 transition relative cursor-pointer ${
@@ -899,7 +952,7 @@ export default function App() {
               </div>
 
               {/* Panel Body */}
-              <div className="flex-1 overflow-y-auto p-5 text-xs space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto p-5 text-xs space-y-4">
                 {activeTab === 'suggestions' ? (
                   <div>
                     <p className="font-semibold text-[#1e2419] mb-3 text-xs">What would you like to do?</p>
@@ -1002,7 +1055,7 @@ export default function App() {
               </div>
 
               {/* Chat Input Bar */}
-              <div className="p-4 border-t border-[#e5e8e1]">
+              <div className="p-4 border-t border-[#e5e8e1] flex-shrink-0 bg-white">
                 <form onSubmit={handleSendMessage} className="relative">
                   <div className="border border-[#e5e8e1] focus-within:border-[#4d602c] rounded-2xl bg-[#fcfdfa] p-2 transition">
                     <textarea
