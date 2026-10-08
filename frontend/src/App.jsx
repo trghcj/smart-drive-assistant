@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   Folder, 
@@ -65,6 +65,11 @@ export default function App() {
   const [scheduleFolder, setScheduleFolder] = useState('Weekly Archive');
   const [scheduleNotice, setScheduleNotice] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [chatLog, analyzing, proposedPlan]);
 
   // Read session_id from URL query params on load
   useEffect(() => {
@@ -310,47 +315,52 @@ export default function App() {
   };
 
   const getFileIcon = (item) => {
-    if (item.isFolder) return <Folder className="w-5 h-5 text-amber-400" />;
-    if (item.mimeType.includes('pdf')) return <FileText className="w-5 h-5 text-rose-400" />;
-    if (item.mimeType.includes('spreadsheet') || item.mimeType.includes('sheet')) return <FileSpreadsheet className="w-5 h-5 text-emerald-400" />;
-    if (item.mimeType.includes('image')) return <FileImage className="w-5 h-5 text-purple-400" />;
-    return <FileText className="w-5 h-5 text-blue-400" />;
+    const box = 'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ';
+    if (item.isFolder) return <div className={box + 'bg-moss-100 text-moss-600'}><Folder className="w-[18px] h-[18px]" /></div>;
+    if (item.mimeType.includes('pdf')) return <div className={box + 'bg-rose-50 text-rose-500'}><FileText className="w-[18px] h-[18px]" /></div>;
+    if (item.mimeType.includes('spreadsheet') || item.mimeType.includes('sheet')) return <div className={box + 'bg-emerald-50 text-emerald-600'}><FileSpreadsheet className="w-[18px] h-[18px]" /></div>;
+    if (item.mimeType.includes('image')) return <div className={box + 'bg-amber-50 text-amber-600'}><FileImage className="w-[18px] h-[18px]" /></div>;
+    return <div className={box + 'bg-sky-50 text-sky-600'}><FileText className="w-[18px] h-[18px]" /></div>;
   };
 
+  const modalShell = 'fixed inset-0 bg-moss-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50';
+  const modalCard = 'bg-white border border-moss-100 rounded-2xl w-full p-6 shadow-2xl shadow-moss-900/20';
+  const inputCls = 'w-full bg-white border border-moss-200 rounded-lg p-2.5 text-ink outline-none focus:border-moss-500 focus:ring-2 focus:ring-moss-200 transition';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen lg:h-screen flex flex-col text-ink">
       {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg border border-indigo-500/30">
-            <HardDrive className="w-6 h-6" />
+      <header className="border-b border-moss-100 bg-white/80 backdrop-blur px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-10">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 btn-primary rounded-xl flex-shrink-0">
+            <HardDrive className="w-5 h-5" />
           </div>
-          <div>
-            <h1 className="font-bold text-lg tracking-wide flex items-center gap-2">
+          <div className="min-w-0">
+            <h1 className="font-bold text-base sm:text-lg tracking-tight flex items-center gap-2 flex-wrap">
               Smart Drive Assistant
-              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-moss-100 text-moss-700 border border-moss-200">
                 Gemini Powered
               </span>
             </h1>
-            <p className="text-xs text-slate-400">Autonomous file sorting, organization & cleanup</p>
+            <p className="text-xs text-ink-soft truncate">Autonomous file sorting, organization &amp; cleanup</p>
           </div>
         </div>
 
         {sessionId && userProfile ? (
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-3 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-2.5 bg-white pl-1.5 pr-3 py-1 rounded-full border border-moss-200">
               {userProfile.photoLink ? (
                 <img src={userProfile.photoLink} alt={userProfile.displayName} className="w-7 h-7 rounded-full" />
               ) : (
-                <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">
+                <div className="w-7 h-7 rounded-full btn-primary flex items-center justify-center text-xs font-bold">
                   {userProfile.displayName?.charAt(0) || 'U'}
                 </div>
               )}
-              <span className="text-sm font-medium pr-1">{userProfile.displayName || userProfile.emailAddress}</span>
+              <span className="hidden sm:inline text-sm font-medium max-w-[160px] truncate">{userProfile.displayName || userProfile.emailAddress}</span>
             </div>
-            <button 
+            <button
               onClick={handleLogout}
-              className="text-xs text-slate-400 hover:text-rose-400 transition"
+              className="text-xs font-medium text-ink-soft hover:text-rose-600 transition cursor-pointer"
             >
               Sign Out
             </button>
@@ -358,7 +368,7 @@ export default function App() {
         ) : (
           <button
             onClick={handleGoogleLogin}
-            className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+            className="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm cursor-pointer flex-shrink-0"
           >
             <span>Connect Google Drive</span>
           </button>
@@ -368,36 +378,36 @@ export default function App() {
       {/* Main Body */}
       {!sessionId ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <div className="max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl">
-            <div className="w-16 h-16 bg-indigo-600/10 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-500/20">
+          <div className="max-w-md card p-8 rounded-3xl">
+            <div className="w-16 h-16 btn-primary rounded-2xl flex items-center justify-center mx-auto mb-5">
               <Sparkles className="w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-bold mb-2">Connect Your Google Drive</h2>
-            <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+            <h2 className="text-2xl font-bold tracking-tight mb-2">Connect Your Google Drive</h2>
+            <p className="text-sm text-ink-soft mb-6 leading-relaxed">
               Automate Drive organization with natural language. Organize receipts, group client files, and auto-create folders with safe dry-run approval.
             </p>
             <button
               onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-medium transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+              className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium cursor-pointer"
             >
               <span>Authorize with Google OAuth</span>
             </button>
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4">
           {/* Left Panel: Drive File Explorer */}
-          <section className="flex-1 flex flex-col border-r border-slate-800 bg-slate-950/50">
-            {/* Breadcrumb Bar */}
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/30">
-              <nav className="flex items-center space-x-1 text-sm overflow-x-auto">
+          <section className="flex-1 min-w-0 min-h-[24rem] flex flex-col card rounded-2xl overflow-hidden">
+            {/* Breadcrumb + toolbar */}
+            <div className="px-4 py-3 border-b border-moss-100 bg-moss-50/60 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <nav className="flex items-center text-sm overflow-x-auto min-w-0">
                 {folderHistory.map((folder, idx) => (
                   <React.Fragment key={folder.id}>
-                    {idx > 0 && <ChevronRight className="w-4 h-4 text-slate-600 mx-1 flex-shrink-0" />}
+                    {idx > 0 && <ChevronRight className="w-4 h-4 text-moss-300 mx-1 flex-shrink-0" />}
                     <button
                       onClick={() => navigateBreadcrumb(idx)}
-                      className={`hover:text-indigo-400 transition font-medium whitespace-nowrap cursor-pointer ${
-                        idx === folderHistory.length - 1 ? 'text-indigo-400' : 'text-slate-400'
+                      className={`hover:text-moss-700 transition font-medium whitespace-nowrap cursor-pointer ${
+                        idx === folderHistory.length - 1 ? 'text-moss-700' : 'text-ink-soft'
                       }`}
                     >
                       {folder.name}
@@ -406,10 +416,10 @@ export default function App() {
                 ))}
               </nav>
 
-              <div className="flex items-center space-x-2">
-                <label className="flex items-center space-x-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer">
                   <UploadCloud className="w-3.5 h-3.5" />
-                  <span>{uploading ? 'Uploading...' : 'Upload Files'}</span>
+                  <span>{uploading ? 'Uploading...' : 'Upload'}</span>
                   <input
                     type="file"
                     multiple
@@ -421,25 +431,25 @@ export default function App() {
 
                 <button
                   onClick={handleScanDuplicates}
-                  className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition"
+                  className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
                   title="Find duplicate files by MD5 checksum"
                 >
-                  <Copy className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Find Duplicates</span>
+                  <Copy className="w-3.5 h-3.5 text-moss-500" />
+                  <span>Duplicates</span>
                 </button>
 
                 <button
                   onClick={() => setScheduleModal(true)}
-                  className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition"
+                  className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
                   title="Schedule automated periodic cleanup"
                 >
-                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Auto-Clean Schedule</span>
+                  <Clock className="w-3.5 h-3.5 text-moss-500" />
+                  <span>Auto-Clean</span>
                 </button>
 
                 <button
                   onClick={() => fetchFiles(currentFolder)}
-                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                  className="p-1.5 text-ink-soft hover:text-moss-700 rounded-lg hover:bg-moss-100 transition cursor-pointer"
                   title="Refresh folder"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingFiles ? 'animate-spin' : ''}`} />
@@ -449,27 +459,30 @@ export default function App() {
 
             {/* Undo Notification Bar */}
             {undoMessage && (
-              <div className="bg-emerald-950/60 border-b border-emerald-800/40 px-4 py-2.5 flex items-center justify-between text-xs text-emerald-300">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
-                  {undoMessage}
+              <div className="bg-moss-100 border-b border-moss-200 px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-moss-800">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <CheckCircle className="w-4 h-4 text-moss-600 flex-shrink-0" />
+                  <span className="truncate">{undoMessage}</span>
                 </span>
                 {undoToken && (
                   <button
                     onClick={handleUndo}
-                    className="flex items-center gap-1 bg-emerald-800/60 hover:bg-emerald-700/60 px-2.5 py-1 rounded text-emerald-200 transition cursor-pointer font-medium"
+                    className="flex items-center gap-1 bg-white hover:bg-moss-50 border border-moss-300 px-2.5 py-1 rounded-md text-moss-800 transition cursor-pointer font-medium flex-shrink-0"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    Undo Action
+                    Undo
                   </button>
                 )}
               </div>
             )}
 
             {/* File List / Drag-and-Drop Dropzone */}
-            <div 
+            <div
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-              onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                if (!e.currentTarget.contains(e.relatedTarget)) setDragActive(false);
+              }}
               onDrop={(e) => {
                 e.preventDefault();
                 setDragActive(false);
@@ -477,23 +490,21 @@ export default function App() {
                   handleFileUpload(e.dataTransfer.files);
                 }
               }}
-              className={`flex-1 overflow-y-auto p-4 space-y-1.5 transition ${
-                dragActive ? 'bg-indigo-950/30 border-2 border-dashed border-indigo-500 m-2 rounded-2xl' : ''
-              }`}
+              className="relative flex-1 min-h-0 overflow-y-auto p-3 space-y-1.5"
             >
               {dragActive && (
-                <div className="flex flex-col items-center justify-center p-8 text-indigo-400 font-medium text-sm animate-pulse">
+                <div className="sticky top-0 left-0 right-0 z-10 pointer-events-none flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-moss-500 bg-moss-50/95 text-moss-700 font-medium text-sm py-8">
                   <UploadCloud className="w-10 h-10 mb-2" />
-                  Drop files to upload directly to this Google Drive folder
+                  Drop files to upload to this folder
                 </div>
               )}
               {loadingFiles ? (
-                <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
+                <div className="flex items-center justify-center h-48 text-ink-mute text-sm">
                   Loading Drive files...
                 </div>
               ) : files.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-slate-500 text-sm">
-                  <Folder className="w-10 h-10 stroke-1 text-slate-700 mb-2" />
+                <div className="flex flex-col items-center justify-center h-48 text-ink-mute text-sm">
+                  <Folder className="w-10 h-10 stroke-1 text-moss-300 mb-2" />
                   No files or folders found here.
                 </div>
               ) : (
@@ -501,20 +512,20 @@ export default function App() {
                   <div
                     key={file.id}
                     onClick={() => file.isFolder && navigateToFolder(file)}
-                    className={`flex items-center justify-between p-3 rounded-xl border border-slate-800/60 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-700 transition ${
+                    className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border border-transparent hover:bg-moss-50 hover:border-moss-200 transition ${
                       file.isFolder ? 'cursor-pointer' : ''
                     }`}
                   >
-                    <div className="flex items-center space-x-3 truncate">
+                    <div className="flex items-center gap-3 min-w-0">
                       {getFileIcon(file)}
-                      <span className="text-sm font-medium truncate text-slate-200">{file.name}</span>
+                      <span className="text-sm font-medium truncate">{file.name}</span>
                     </div>
 
-                    <div className="flex items-center space-x-3 text-xs text-slate-500 flex-shrink-0">
+                    <div className="flex items-center gap-3 text-xs text-ink-mute flex-shrink-0">
                       {file.isFolder ? (
-                        <span className="text-slate-500 font-mono">Folder</span>
+                        <span>Folder</span>
                       ) : (
-                        <span>{file.size ? `${(file.size / 1024).toFixed(1)} KB` : ''}</span>
+                        <span className="tabular-nums">{file.size ? `${(file.size / 1024).toFixed(1)} KB` : ''}</span>
                       )}
                       {file.webViewLink && (
                         <a
@@ -522,7 +533,7 @@ export default function App() {
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="hover:text-indigo-400 transition"
+                          className="p-1 rounded hover:bg-moss-100 hover:text-moss-700 transition"
                           title="Open in Drive"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
@@ -536,26 +547,24 @@ export default function App() {
           </section>
 
           {/* Right Panel: AI Chat & Plan Review */}
-          <aside className="w-full lg:w-[440px] flex flex-col border-t lg:border-t-0 border-slate-800 bg-slate-900/40">
-            <div className="p-4 border-b border-slate-800 flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
+          <aside className="w-full lg:w-[440px] h-[36rem] lg:h-auto flex-shrink-0 min-h-0 flex flex-col card rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-moss-100 bg-moss-50/60 flex items-center gap-2">
+              <div className="p-1.5 btn-primary rounded-lg"><Sparkles className="w-3.5 h-3.5" /></div>
               <h2 className="font-semibold text-sm">AI Organizer Assistant</h2>
             </div>
 
             {/* Chat Conversation */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 text-sm">
               {chatLog.map((msg, i) => (
                 <div
                   key={i}
-                  className={`flex flex-col ${
-                    msg.role === 'user' ? 'items-end' : 'items-start'
-                  }`}
+                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <div
-                    className={`max-w-[90%] rounded-2xl p-3.5 leading-relaxed whitespace-pre-wrap ${
+                    className={`max-w-[90%] rounded-2xl px-3.5 py-3 leading-relaxed whitespace-pre-wrap break-words ${
                       msg.role === 'user'
-                        ? 'bg-indigo-600 text-white rounded-br-none'
-                        : 'bg-slate-800/90 text-slate-200 border border-slate-700/60 rounded-bl-none'
+                        ? 'btn-primary rounded-br-md'
+                        : 'bg-moss-50 text-ink border border-moss-100 rounded-bl-md'
                     }`}
                   >
                     {msg.text}
@@ -564,26 +573,26 @@ export default function App() {
               ))}
 
               {analyzing && (
-                <div className="flex items-center space-x-2 text-slate-400 text-xs italic bg-slate-800/40 p-3 rounded-xl border border-slate-800">
-                  <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
-                  <span>Scanning files & planning reorganization...</span>
+                <div className="flex items-center gap-2 text-ink-soft text-xs italic bg-moss-50 p-3 rounded-xl border border-moss-100">
+                  <Sparkles className="w-4 h-4 text-moss-500 animate-pulse" />
+                  <span>Scanning files &amp; planning reorganization...</span>
                 </div>
               )}
 
               {/* Dry Run Plan Card */}
               {proposedPlan && (
-                <div className="mt-4 bg-slate-800/95 border-2 border-indigo-500/50 rounded-2xl p-4 shadow-xl">
+                <div className="bg-white border border-moss-300 rounded-2xl p-4 shadow-lg shadow-moss-900/10 ring-4 ring-moss-100">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-moss-700 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" />
                       Proposed Plan (Dry-Run)
                     </span>
-                    <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono">
+                    <span className="text-xs bg-moss-100 text-moss-800 px-2 py-0.5 rounded-full font-medium">
                       {proposedPlan.operations.length} actions
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+                  <p className="text-xs text-ink-soft mb-3 leading-relaxed">
                     Review the actions below before applying changes to your Drive:
                   </p>
 
@@ -591,54 +600,54 @@ export default function App() {
                     {proposedPlan.operations.map((op) => (
                       <div
                         key={op.id}
-                        className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-700/60 text-xs flex flex-col gap-1"
+                        className="p-2.5 rounded-lg bg-moss-50 border border-moss-100 text-xs flex flex-col gap-1"
                       >
                         {op.type === 'CREATE_FOLDER' && (
-                          <div className="flex items-center gap-2 text-amber-300 font-medium">
-                            <FolderPlus className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 text-moss-800 font-medium">
+                            <FolderPlus className="w-4 h-4 text-moss-600 flex-shrink-0" />
                             <span>Create folder: <strong>{op.folder_name}</strong></span>
                           </div>
                         )}
                         {op.type === 'MOVE_FILE' && (
-                          <div className="flex items-center gap-2 text-slate-200">
-                            <ArrowRight className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2">
+                            <ArrowRight className="w-4 h-4 text-moss-600 flex-shrink-0" />
                             <span className="truncate">
-                              Move <strong className="text-slate-100">{op.file_name}</strong> &rarr; <span className="text-indigo-300">{op.target_folder_name}</span>
+                              Move <strong>{op.file_name}</strong> &rarr; <span className="text-moss-700 font-medium">{op.target_folder_name}</span>
                             </span>
                           </div>
                         )}
                         {op.type === 'SHARE_FILE' && (
-                          <div className="flex items-center gap-2 text-sky-300">
-                            <Share2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 text-sky-700">
+                            <Share2 className="w-4 h-4 text-sky-600 flex-shrink-0" />
                             <span className="truncate">
-                              Share <strong className="text-slate-100">{op.file_name}</strong> with <strong className="text-sky-200">{op.email}</strong> ({op.role})
+                              Share <strong>{op.file_name}</strong> with <strong>{op.email}</strong> ({op.role})
                             </span>
                           </div>
                         )}
                         {op.type === 'CREATE_DOC' && (
-                          <div className="flex items-center gap-2 text-blue-300">
-                            <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 text-sky-700">
+                            <FileText className="w-4 h-4 text-sky-600 flex-shrink-0" />
                             <span>Create Google Doc: <strong>{op.doc_title || op.file_name}</strong></span>
                           </div>
                         )}
                         {op.type === 'EXPORT_PDF' && (
-                          <div className="flex items-center gap-2 text-rose-300">
-                            <FileCheck className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 text-rose-700">
+                            <FileCheck className="w-4 h-4 text-rose-500 flex-shrink-0" />
                             <span>Export as PDF: <strong>{op.file_name}</strong></span>
                           </div>
                         )}
                         {op.reason && (
-                          <span className="text-[10px] text-slate-500 italic pl-6">{op.reason}</span>
+                          <span className="text-[11px] text-ink-mute italic pl-6">{op.reason}</span>
                         )}
                       </div>
                     ))}
                   </div>
 
-                  <div className="flex space-x-2">
+                  <div className="flex gap-2">
                     <button
                       onClick={handleExecutePlan}
                       disabled={executing}
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2.5 rounded-xl transition flex items-center justify-center space-x-1 cursor-pointer disabled:opacity-50"
+                      className="btn-primary flex-1 text-xs font-semibold py-2.5 rounded-xl flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <CheckCircle className="w-3.5 h-3.5" />
                       <span>{executing ? 'Executing...' : 'Approve & Execute'}</span>
@@ -646,46 +655,47 @@ export default function App() {
                     <button
                       onClick={() => setProposedPlan(null)}
                       disabled={executing}
-                      className="px-3 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-semibold py-2.5 rounded-xl transition cursor-pointer"
+                      className="btn-ghost px-4 text-xs font-semibold py-2.5 rounded-xl cursor-pointer"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               )}
+              <div ref={chatEndRef} />
             </div>
 
             {/* Input Bar */}
-            <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-800 bg-slate-900/70">
-              <div className="flex items-center bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 focus-within:border-indigo-500 transition">
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-moss-100 bg-moss-50/60">
+              <div className="flex items-center gap-1 bg-white border border-moss-200 rounded-xl pl-3 pr-1.5 py-1 focus-within:border-moss-500 focus-within:ring-2 focus-within:ring-moss-200 transition">
                 <input
                   type="text"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={isListening ? "Listening... speak now..." : "Ask or speak to organize, sort, create folders..."}
-                  className="w-full bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none py-1.5"
+                  placeholder={isListening ? 'Listening... speak now...' : 'Ask or speak to organize, sort, create folders...'}
+                  className="w-full bg-transparent text-sm text-ink placeholder-ink-mute outline-none py-1.5"
                   disabled={analyzing}
                 />
-                
+
                 {/* Voice / Mic Button */}
                 <button
                   type="button"
                   onClick={toggleVoiceInput}
                   disabled={analyzing}
-                  title={isListening ? "Stop listening" : "Speak your command"}
-                  className={`p-1.5 rounded-lg transition cursor-pointer mr-1 ${
-                    isListening 
-                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse' 
-                      : 'text-slate-400 hover:text-indigo-400'
+                  title={isListening ? 'Stop listening' : 'Speak your command'}
+                  className={`p-2 rounded-lg transition cursor-pointer ${
+                    isListening
+                      ? 'bg-rose-50 text-rose-600 border border-rose-200 animate-pulse'
+                      : 'text-ink-soft hover:text-moss-700 hover:bg-moss-50'
                   }`}
                 >
-                  {isListening ? <MicOff className="w-4 h-4 text-rose-400" /> : <Mic className="w-4 h-4" />}
+                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
 
                 <button
                   type="submit"
                   disabled={!prompt.trim() || analyzing}
-                  className="p-1.5 text-indigo-400 hover:text-indigo-300 disabled:opacity-40 transition cursor-pointer"
+                  className="btn-primary p-2 rounded-lg cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -694,18 +704,19 @@ export default function App() {
           </aside>
         </div>
       )}
+
       {/* Duplicates Modal */}
       {duplicatesModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col max-h-[80vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div className="flex items-center space-x-2 text-amber-400">
+        <div className={modalShell}>
+          <div className={`${modalCard} max-w-lg flex flex-col max-h-[80vh]`}>
+            <div className="flex items-center justify-between pb-4 border-b border-moss-100">
+              <div className="flex items-center gap-2 text-moss-700">
                 <Copy className="w-5 h-5" />
-                <h3 className="font-bold text-base text-slate-100">Duplicate Files Detection</h3>
+                <h3 className="font-bold text-base text-ink">Duplicate Files Detection</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setDuplicatesModal(false)}
-                className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded bg-slate-800 cursor-pointer"
+                className="btn-ghost text-xs px-2.5 py-1 rounded-md cursor-pointer"
               >
                 ✕ Close
               </button>
@@ -713,25 +724,25 @@ export default function App() {
 
             <div className="flex-1 overflow-y-auto py-4 space-y-3">
               {scanningDuplicates ? (
-                <div className="text-center py-8 text-slate-400 text-sm animate-pulse">
+                <div className="text-center py-8 text-ink-soft text-sm animate-pulse">
                   Comparing MD5 checksums and file sizes...
                 </div>
               ) : duplicateList.length === 0 ? (
-                <div className="text-center py-8 text-emerald-400 text-sm">
+                <div className="text-center py-8 text-moss-700 text-sm font-medium">
                   🎉 No duplicate files found in this folder!
                 </div>
               ) : (
                 duplicateList.map((item, idx) => (
-                  <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs space-y-2">
-                    <div className="text-slate-300 font-medium flex items-center justify-between">
+                  <div key={idx} className="bg-moss-50 p-3 rounded-xl border border-moss-100 text-xs space-y-2">
+                    <div className="font-medium flex items-center justify-between gap-2">
                       <span className="truncate">Original: <strong>{item.primary.name}</strong></span>
-                      <span className="text-slate-500 font-mono text-[10px]">MD5 match</span>
+                      <span className="text-ink-mute font-mono text-[10px] flex-shrink-0">MD5 match</span>
                     </div>
-                    <div className="pl-3 border-l-2 border-amber-500/40 space-y-1">
+                    <div className="pl-3 border-l-2 border-moss-400 space-y-1">
                       {item.duplicates.map((dup) => (
-                        <div key={dup.id} className="text-amber-300/80 flex items-center justify-between">
+                        <div key={dup.id} className="text-moss-800 flex items-center justify-between gap-2">
                           <span className="truncate">Duplicate: {dup.name}</span>
-                          <span className="text-[10px] text-slate-500">{(dup.size / 1024).toFixed(1)} KB</span>
+                          <span className="text-[10px] text-ink-mute flex-shrink-0">{(dup.size / 1024).toFixed(1)} KB</span>
                         </div>
                       ))}
                     </div>
@@ -740,10 +751,10 @@ export default function App() {
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-800 flex justify-end">
+            <div className="pt-3 border-t border-moss-100 flex justify-end">
               <button
                 onClick={() => setDuplicatesModal(false)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-lg font-medium cursor-pointer"
+                className="btn-primary text-xs px-4 py-2 rounded-lg font-medium cursor-pointer"
               >
                 Done
               </button>
@@ -754,16 +765,16 @@ export default function App() {
 
       {/* Auto-Clean Schedule Modal */}
       {scheduleModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div className="flex items-center space-x-2 text-emerald-400">
+        <div className={modalShell}>
+          <div className={`${modalCard} max-w-md`}>
+            <div className="flex items-center justify-between pb-4 border-b border-moss-100">
+              <div className="flex items-center gap-2 text-moss-700">
                 <Clock className="w-5 h-5" />
-                <h3 className="font-bold text-base text-slate-100">Schedule Auto-Clean</h3>
+                <h3 className="font-bold text-base text-ink">Schedule Auto-Clean</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setScheduleModal(false)}
-                className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded bg-slate-800 cursor-pointer"
+                className="btn-ghost text-xs px-2.5 py-1 rounded-md cursor-pointer"
               >
                 ✕ Close
               </button>
@@ -771,11 +782,11 @@ export default function App() {
 
             <form onSubmit={handleSaveSchedule} className="py-4 space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Frequency</label>
+                <label className="block text-ink-soft mb-1 font-medium">Frequency</label>
                 <select
                   value={scheduleCron}
                   onChange={(e) => setScheduleCron(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 outline-none"
+                  className={inputCls}
                 >
                   <option value="every_friday">Every Friday at 5:00 PM</option>
                   <option value="every_day">Daily at Midnight (12:00 AM)</option>
@@ -784,31 +795,31 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Target Archive Folder</label>
+                <label className="block text-ink-soft mb-1 font-medium">Target Archive Folder</label>
                 <input
                   type="text"
                   value={scheduleFolder}
                   onChange={(e) => setScheduleFolder(e.target.value)}
                   placeholder="e.g. Weekly Archive"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 outline-none"
+                  className={inputCls}
                 />
               </div>
 
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-[11px] text-ink-mute leading-relaxed">
                 The assistant will automatically sweep unorganized root files into this folder on schedule.
               </p>
 
-              <div className="pt-2 flex justify-end space-x-2">
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setScheduleModal(false)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg font-medium cursor-pointer"
+                  className="btn-ghost px-4 py-2 rounded-lg font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-medium cursor-pointer shadow-lg shadow-emerald-600/20"
+                  className="btn-primary px-4 py-2 rounded-lg font-medium cursor-pointer"
                 >
                   Activate Schedule
                 </button>
