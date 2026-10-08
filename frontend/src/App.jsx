@@ -1,31 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { 
-  Folder, 
-  FileText, 
-  ArrowRight, 
-  CheckCircle, 
-  RotateCcw, 
-  Sparkles, 
-  Send, 
-  HardDrive, 
-  RefreshCw, 
+import {
+  Folder,
+  FileText,
+  CheckCircle,
+  RotateCcw,
+  Send,
+  HardDrive,
+  RefreshCw,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   FolderPlus,
   FileSpreadsheet,
   FileImage,
-  AlertCircle,
-  Upload,
+  Plus,
   UploadCloud,
   Copy,
-  Users,
   Clock,
-  Trash2,
   FileCheck,
   Share2,
   Mic,
-  MicOff
+  MicOff,
+  Search,
+  X,
+  PanelRight,
+  ArrowUpDown
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -44,12 +44,7 @@ export default function App() {
 
   // Chat & Agent state
   const [prompt, setPrompt] = useState('');
-  const [chatLog, setChatLog] = useState([
-    {
-      role: 'assistant',
-      text: "👋 Hi! I'm your AI Drive Assistant. Tell me what to organize, e.g.:\n• 'Find all invoice PDFs and move them to a new 2026 Invoices folder'\n• 'Group loose images into a Photos folder'"
-    }
-  ]);
+  const [chatLog, setChatLog] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [proposedPlan, setProposedPlan] = useState(null);
   const [executing, setExecuting] = useState(false);
@@ -68,6 +63,13 @@ export default function App() {
   const [deleteAccountModal, setDeleteAccountModal] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const chatEndRef = useRef(null);
+  const promptInputRef = useRef(null);
+  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [organizeMenu, setOrganizeMenu] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('name');
+  const [sortMenu, setSortMenu] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -169,6 +171,7 @@ export default function App() {
     setChatLog((prev) => [...prev, { role: 'user', text: userMessage }]);
     setAnalyzing(true);
     setProposedPlan(null);
+    setReviewing(false);
 
     try {
       const res = await axios.post(`${API_BASE}/agent/chat?session_id=${sessionId}`, {
@@ -187,7 +190,7 @@ export default function App() {
     } catch (err) {
       setChatLog((prev) => [
         ...prev, 
-        { role: 'assistant', text: `⚠️ Error analyzing: ${err.response?.data?.detail || err.message}` }
+        { role: 'assistant', text: `Request failed: ${err.response?.data?.detail || err.message}` }
       ]);
     } finally {
       setAnalyzing(false);
@@ -250,6 +253,7 @@ export default function App() {
       }
       setUndoMessage(res.data.message);
       setProposedPlan(null);
+      setReviewing(false);
       // Refresh folder contents
       fetchFiles(currentFolder);
     } catch (err) {
@@ -294,7 +298,7 @@ export default function App() {
     fetchFiles(currentFolder);
     setChatLog((prev) => [
       ...prev,
-      { role: 'assistant', text: `✅ Uploaded ${successCount} file(s) into the current folder. You can now ask me to organize or sort them!` }
+      { role: 'assistant', text: `Uploaded ${successCount} file(s) to this folder.` }
     ]);
   };
 
@@ -322,7 +326,7 @@ export default function App() {
       setScheduleModal(false);
       setChatLog((prev) => [
         ...prev,
-        { role: 'assistant', text: `⏰ ${res.data.message}` }
+        { role: 'assistant', text: res.data.message }
       ]);
     } catch (err) {
       alert(`Schedule error: ${err.message}`);
@@ -330,169 +334,367 @@ export default function App() {
   };
 
   const getFileIcon = (item) => {
-    const box = 'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ';
-    if (item.isFolder) return <div className={box + 'bg-moss-100 text-moss-600'}><Folder className="w-[18px] h-[18px]" /></div>;
-    if (item.mimeType.includes('pdf')) return <div className={box + 'bg-rose-50 text-rose-500'}><FileText className="w-[18px] h-[18px]" /></div>;
-    if (item.mimeType.includes('spreadsheet') || item.mimeType.includes('sheet')) return <div className={box + 'bg-emerald-50 text-emerald-600'}><FileSpreadsheet className="w-[18px] h-[18px]" /></div>;
-    if (item.mimeType.includes('image')) return <div className={box + 'bg-amber-50 text-amber-600'}><FileImage className="w-[18px] h-[18px]" /></div>;
-    return <div className={box + 'bg-sky-50 text-sky-600'}><FileText className="w-[18px] h-[18px]" /></div>;
+    const cls = 'w-4 h-4 flex-shrink-0';
+    if (item.isFolder) return <Folder className={`${cls} text-ink-soft fill-hover`} />;
+    if (item.mimeType.includes('pdf')) return <FileText className={`${cls} text-rose-500`} />;
+    if (item.mimeType.includes('spreadsheet') || item.mimeType.includes('sheet')) return <FileSpreadsheet className={`${cls} text-emerald-600`} />;
+    if (item.mimeType.includes('image')) return <FileImage className={`${cls} text-amber-600`} />;
+    return <FileText className={`${cls} text-sky-600`} />;
   };
 
-  const modalShell = 'fixed inset-0 bg-moss-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50';
-  const modalCard = 'bg-white border border-moss-100 rounded-2xl w-full p-6 shadow-2xl shadow-moss-900/20';
-  const inputCls = 'w-full bg-white border border-moss-200 rounded-lg p-2.5 text-ink outline-none focus:border-moss-500 focus:ring-2 focus:ring-moss-200 transition';
+  const formatSize = (bytes) => {
+    if (!bytes) return '';
+    const n = Number(bytes);
+    if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(n / 1024))} KB`;
+  };
+
+  const formatDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const sortLabels = { name: 'Name', size: 'Size', modified: 'Modified' };
+
+  const visibleFiles = files
+    .filter((f) => f.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => {
+      if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+      if (sortKey === 'size') return (Number(b.size) || 0) - (Number(a.size) || 0);
+      if (sortKey === 'modified') return (b.modifiedTime || '').localeCompare(a.modifiedTime || '');
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+  const suggestions = [
+    'Find all invoice PDFs',
+    'Group placement documents',
+    'Find duplicate files',
+    'Create a folder for images'
+  ];
+
+  const summarizePlan = (ops) => {
+    const lines = [];
+    const folders = ops.filter((o) => o.type === 'CREATE_FOLDER');
+    const moves = ops.filter((o) => o.type === 'MOVE_FILE');
+    const shares = ops.filter((o) => o.type === 'SHARE_FILE');
+    const docs = ops.filter((o) => o.type === 'CREATE_DOC');
+    const pdfs = ops.filter((o) => o.type === 'EXPORT_PDF');
+    if (folders.length) lines.push(`Create ${folders.length} folder${folders.length > 1 ? 's' : ''}`);
+    if (moves.length) {
+      const targets = [...new Set(moves.map((m) => m.target_folder_name).filter(Boolean))];
+      lines.push(`Move ${moves.length} file${moves.length > 1 ? 's' : ''}${targets.length ? ` to ${targets.join(', ')}` : ''}`);
+    }
+    if (shares.length) lines.push(`Share ${shares.length} file${shares.length > 1 ? 's' : ''}`);
+    if (docs.length) lines.push(`Create ${docs.length} document${docs.length > 1 ? 's' : ''}`);
+    if (pdfs.length) lines.push(`Export ${pdfs.length} file${pdfs.length > 1 ? 's' : ''} as PDF`);
+    return lines;
+  };
+
+  const describeOp = (op) => {
+    switch (op.type) {
+      case 'CREATE_FOLDER': return `Create folder: ${op.folder_name}`;
+      case 'MOVE_FILE': return `Move ${op.file_name} → ${op.target_folder_name}`;
+      case 'SHARE_FILE': return `Share ${op.file_name} with ${op.email} (${op.role})`;
+      case 'CREATE_DOC': return `Create document: ${op.doc_title || op.file_name}`;
+      case 'EXPORT_PDF': return `Export as PDF: ${op.file_name}`;
+      default: return op.type;
+    }
+  };
+
+  const openAssistantWith = (text) => {
+    setAssistantOpen(true);
+    if (text) setPrompt(text);
+    setTimeout(() => promptInputRef.current?.focus(), 0);
+  };
+
+  const modalShell = 'fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50';
+  const modalCard = 'bg-white border border-line rounded-xl w-full p-5 shadow-xl';
+
+  const assistantPanel = (
+    <aside className="w-full lg:w-80 flex-shrink-0 min-h-0 h-[32rem] lg:h-auto flex flex-col border-t lg:border-t-0 lg:border-l border-line bg-white">
+      <div className="h-12 px-4 border-b border-line flex items-center justify-between flex-shrink-0">
+        <h2 className="font-semibold text-sm">Assistant</h2>
+        <button
+          onClick={() => setAssistantOpen(false)}
+          className="p-1.5 rounded-md text-ink-mute hover:bg-hover hover:text-ink cursor-pointer"
+          title="Collapse assistant"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 text-[13px]">
+        {chatLog.length === 0 && !analyzing && !proposedPlan && (
+          <div>
+            <p className="text-ink mb-3">What would you like to do?</p>
+            <ul className="border-t border-line">
+              {suggestions.map((s) => (
+                <li key={s}>
+                  <button
+                    onClick={() => openAssistantWith(s)}
+                    className="w-full text-left py-2 border-b border-line text-ink-soft hover:text-ink hover:bg-sub px-1 cursor-pointer"
+                  >
+                    {s}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {chatLog.map((msg, i) => (
+            msg.role === 'user' ? (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[90%] bg-hover text-ink rounded-lg px-3 py-2 whitespace-pre-wrap break-words">
+                  {msg.text}
+                </div>
+              </div>
+            ) : (
+              <p key={i} className="text-ink-soft leading-relaxed whitespace-pre-wrap break-words">
+                {msg.text}
+              </p>
+            )
+          ))}
+
+          {analyzing && <p className="text-ink-mute">Searching files...</p>}
+
+          {/* Action review */}
+          {proposedPlan && (
+            <div className="border-t border-line pt-3">
+              <p className="text-xs text-ink-mute mb-1">
+                {proposedPlan.operations.length} change{proposedPlan.operations.length > 1 ? 's' : ''} ready for review
+              </p>
+              <ul className="text-ink space-y-0.5 mb-2">
+                {summarizePlan(proposedPlan.operations).map((line) => (
+                  <li key={line} className="font-medium">{line}</li>
+                ))}
+              </ul>
+
+              {reviewing && (
+                <ul className="mb-3 border-t border-line max-h-56 overflow-y-auto">
+                  {proposedPlan.operations.map((op) => (
+                    <li key={op.id} className="py-1.5 border-b border-line text-ink-soft break-words">
+                      {describeOp(op)}
+                      {op.reason && <span className="block text-xs text-ink-mute">{op.reason}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="flex justify-end gap-2 mt-2">
+                <button
+                  onClick={() => { setProposedPlan(null); setReviewing(false); }}
+                  disabled={executing}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                {reviewing ? (
+                  <button onClick={handleExecutePlan} disabled={executing} className="btn btn-primary">
+                    {executing ? 'Applying...' : 'Apply changes'}
+                  </button>
+                ) : (
+                  <button onClick={() => setReviewing(true)} className="btn btn-primary">
+                    Review changes
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div ref={chatEndRef} />
+      </div>
+
+      <form onSubmit={handleSendMessage} className="p-3 border-t border-line flex-shrink-0">
+        <div className="flex items-center gap-1 border border-line rounded-lg pl-3 pr-1 focus-within:border-accent">
+          <input
+            ref={promptInputRef}
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder={isListening ? 'Listening...' : 'Ask about your files...'}
+            className="flex-1 min-w-0 bg-transparent text-[13px] placeholder-ink-mute outline-none py-2"
+            disabled={analyzing}
+          />
+          <button
+            type="button"
+            onClick={toggleVoiceInput}
+            disabled={analyzing}
+            title={isListening ? 'Stop listening' : 'Speak your request'}
+            className={`p-1.5 rounded-md cursor-pointer ${
+              isListening ? 'text-rose-600 bg-rose-50' : 'text-ink-mute hover:text-ink hover:bg-hover'
+            }`}
+          >
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          </button>
+        </div>
+        <div className="flex justify-end mt-2">
+          <button type="submit" disabled={!prompt.trim() || analyzing} className="btn btn-primary">
+            <Send className="w-3.5 h-3.5" />
+            Send
+          </button>
+        </div>
+      </form>
+    </aside>
+  );
 
   return (
-    <div className="min-h-screen lg:h-screen flex flex-col text-ink">
-      {/* Top Header */}
-      <header className="border-b border-moss-100 bg-white/80 backdrop-blur px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2.5 btn-primary rounded-xl flex-shrink-0">
-            <HardDrive className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="font-bold text-base sm:text-lg tracking-tight flex items-center gap-2 flex-wrap">
-              Smart Drive Assistant
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-moss-100 text-moss-700 border border-moss-200">
-                Gemini Powered
-              </span>
-            </h1>
-            <p className="text-xs text-ink-soft truncate">Autonomous file sorting, organization &amp; cleanup</p>
-          </div>
+    <div className="min-h-screen lg:h-screen flex flex-col bg-white text-ink">
+      {/* Header */}
+      <header className="h-12 border-b border-line px-4 flex items-center gap-4 flex-shrink-0 sticky top-0 bg-white z-20">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <HardDrive className="w-5 h-5 text-ink-soft" />
+          <h1 className="font-semibold text-[15px]">Smart Drive</h1>
         </div>
 
-        {sessionId && userProfile ? (
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <div className="flex items-center gap-2.5 bg-white pl-1.5 pr-3 py-1 rounded-full border border-moss-200">
-              {userProfile.photoLink ? (
-                <img src={userProfile.photoLink} alt={userProfile.displayName} className="w-7 h-7 rounded-full" />
-              ) : (
-                <div className="w-7 h-7 rounded-full btn-primary flex items-center justify-center text-xs font-bold">
-                  {userProfile.displayName?.charAt(0) || 'U'}
-                </div>
-              )}
-              <span className="hidden sm:inline text-sm font-medium max-w-[160px] truncate">{userProfile.displayName || userProfile.emailAddress}</span>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="text-xs font-medium text-ink-soft hover:text-ink transition cursor-pointer"
-            >
-              Sign Out
-            </button>
-            <span className="text-moss-200 text-xs">|</span>
-            <button
-              onClick={() => setDeleteAccountModal(true)}
-              className="text-xs font-medium text-rose-500 hover:text-rose-700 hover:underline transition cursor-pointer flex items-center gap-1"
-              title="Delete account & disconnect Drive completely"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Account</span>
-            </button>
+        {sessionId && (
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-ink-mute absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search files..."
+              className="field !pl-8 !bg-sub !border-transparent focus:!bg-white focus:!border-accent"
+            />
           </div>
-        ) : (
-          <button
-            onClick={handleGoogleLogin}
-            className="btn-primary flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm cursor-pointer flex-shrink-0"
-          >
-            <span>Connect Google Drive</span>
-          </button>
         )}
+
+        <div className="ml-auto flex items-center gap-3 flex-shrink-0">
+          {sessionId && !assistantOpen && (
+            <button onClick={() => openAssistantWith()} className="btn btn-secondary">
+              <PanelRight className="w-4 h-4" />
+              <span className="hidden sm:inline">Assistant</span>
+            </button>
+          )}
+          {sessionId && userProfile && (
+            <>
+              <div className="flex items-center gap-2">
+                {userProfile.photoLink ? (
+                  <img src={userProfile.photoLink} alt={userProfile.displayName} className="w-6 h-6 rounded-full" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-hover text-ink-soft flex items-center justify-center text-xs font-semibold">
+                    {userProfile.displayName?.charAt(0) || 'U'}
+                  </div>
+                )}
+                <span className="hidden md:inline text-[13px] text-ink-soft max-w-[160px] truncate">
+                  {userProfile.displayName || userProfile.emailAddress}
+                </span>
+              </div>
+              <button onClick={handleLogout} className="text-[13px] text-ink-soft hover:text-ink cursor-pointer">
+                Sign out
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
-      {/* Main Body */}
+      {/* Connection screen */}
       {!sessionId ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <div className="max-w-md card p-8 rounded-3xl">
-            <div className="w-16 h-16 btn-primary rounded-2xl flex items-center justify-center mx-auto mb-5">
-              <Sparkles className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-bold tracking-tight mb-2">Connect Your Google Drive</h2>
-            <p className="text-sm text-ink-soft mb-6 leading-relaxed">
-              Automate Drive organization with natural language. Organize receipts, group client files, and auto-create folders with safe dry-run approval.
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-sm text-center">
+            <HardDrive className="w-8 h-8 text-ink-soft mx-auto mb-4" />
+            <h2 className="text-2xl font-semibold mb-1">Smart Drive</h2>
+            <p className="text-[15px] font-medium mb-2">Connect Google Drive</p>
+            <p className="text-[13px] text-ink-soft leading-relaxed mb-6">
+              Smart Drive needs access to your Drive to organize files, find duplicates, and perform requested actions.
             </p>
-            <button
-              onClick={handleGoogleLogin}
-              className="btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium cursor-pointer"
-            >
-              <span>Authorize with Google OAuth</span>
+            <button onClick={handleGoogleLogin} className="btn btn-primary !h-10 !px-5 !text-sm">
+              Connect Google Drive
             </button>
+            <p className="text-xs text-ink-mute mt-4">You can disconnect your account at any time.</p>
           </div>
-        </div>
+        </main>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4">
-          {/* Left Panel: Drive File Explorer */}
-          <section className="flex-1 min-w-0 min-h-[24rem] flex flex-col card rounded-2xl overflow-hidden">
-            {/* Breadcrumb + toolbar */}
-            <div className="px-4 py-3 border-b border-moss-100 bg-moss-50/60 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <nav className="flex items-center text-sm overflow-x-auto min-w-0">
-                {folderHistory.map((folder, idx) => (
-                  <React.Fragment key={folder.id}>
-                    {idx > 0 && <ChevronRight className="w-4 h-4 text-moss-300 mx-1 flex-shrink-0" />}
-                    <button
-                      onClick={() => navigateBreadcrumb(idx)}
-                      className={`hover:text-moss-700 transition font-medium whitespace-nowrap cursor-pointer ${
-                        idx === folderHistory.length - 1 ? 'text-moss-700' : 'text-ink-soft'
-                      }`}
-                    >
-                      {folder.name}
-                    </button>
-                  </React.Fragment>
-                ))}
-              </nav>
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+          {/* File manager */}
+          <main className="flex-1 min-w-0 min-h-[24rem] flex flex-col">
+            {/* Title + actions */}
+            <div className="px-6 pt-5 pb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+              <div className="min-w-0">
+                <nav className="flex items-center flex-wrap text-xl font-semibold">
+                  {folderHistory.map((folder, idx) => (
+                    <React.Fragment key={folder.id}>
+                      {idx > 0 && <ChevronRight className="w-4 h-4 text-ink-mute mx-1.5 flex-shrink-0" />}
+                      <button
+                        onClick={() => navigateBreadcrumb(idx)}
+                        className={`cursor-pointer hover:underline underline-offset-4 ${
+                          idx === folderHistory.length - 1 ? 'text-ink' : 'text-ink-soft font-medium'
+                        }`}
+                      >
+                        {folder.name}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </nav>
+                <p className="text-[13px] text-ink-mute mt-0.5">
+                  {loadingFiles
+                    ? 'Loading...'
+                    : search.trim()
+                      ? `${visibleFiles.length} of ${files.length} items`
+                      : `${files.length} item${files.length === 1 ? '' : 's'}`}
+                </p>
+              </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="btn-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer">
-                  <UploadCloud className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2">
+                <label className={`btn btn-primary ${uploading ? 'opacity-60' : ''}`}>
+                  <Plus className="w-4 h-4" />
                   <span>{uploading ? 'Uploading...' : 'Upload'}</span>
                   <input
                     type="file"
                     multiple
                     className="hidden"
                     disabled={uploading}
-                    onChange={(e) => handleFileUpload(e.target.files)}
+                    onChange={(e) => { handleFileUpload(Array.from(e.target.files)); e.target.value = ''; }}
                   />
                 </label>
 
-                <button
-                  onClick={handleScanDuplicates}
-                  className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
-                  title="Find duplicate files by MD5 checksum"
-                >
-                  <Copy className="w-3.5 h-3.5 text-moss-500" />
-                  <span>Duplicates</span>
-                </button>
-
-                <button
-                  onClick={() => setScheduleModal(true)}
-                  className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
-                  title="Schedule automated periodic cleanup"
-                >
-                  <Clock className="w-3.5 h-3.5 text-moss-500" />
-                  <span>Auto-Clean</span>
-                </button>
+                <div className="relative">
+                  <button onClick={() => setOrganizeMenu((v) => !v)} className="btn btn-secondary">
+                    Organize
+                    <ChevronDown className="w-3.5 h-3.5 text-ink-mute" />
+                  </button>
+                  {organizeMenu && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setOrganizeMenu(false)} />
+                      <div className="menu absolute right-0 top-full mt-1 z-40">
+                        <button className="menu-item" onClick={() => { setOrganizeMenu(false); handleScanDuplicates(); }}>
+                          <Copy className="w-4 h-4 text-ink-mute" /> Find duplicates
+                        </button>
+                        <button className="menu-item" onClick={() => { setOrganizeMenu(false); setScheduleModal(true); }}>
+                          <Clock className="w-4 h-4 text-ink-mute" /> Clean up
+                        </button>
+                        <button className="menu-item" onClick={() => { setOrganizeMenu(false); openAssistantWith(); }}>
+                          <FolderPlus className="w-4 h-4 text-ink-mute" /> Organize with Assistant
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 <button
                   onClick={() => fetchFiles(currentFolder)}
-                  className="p-1.5 text-ink-soft hover:text-moss-700 rounded-lg hover:bg-moss-100 transition cursor-pointer"
+                  className="btn btn-text"
                   title="Refresh folder"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingFiles ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh</span>
                 </button>
               </div>
             </div>
 
-            {/* Undo Notification Bar */}
+            {/* Undo notice */}
             {undoMessage && (
-              <div className="bg-moss-100 border-b border-moss-200 px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-moss-800">
-                <span className="flex items-center gap-1.5 min-w-0">
-                  <CheckCircle className="w-4 h-4 text-moss-600 flex-shrink-0" />
+              <div className="mx-6 mb-2 px-3 py-2 border border-line bg-sub rounded-lg flex items-center justify-between gap-3 text-[13px]">
+                <span className="flex items-center gap-2 min-w-0 text-ink-soft">
+                  <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
                   <span className="truncate">{undoMessage}</span>
                 </span>
                 {undoToken && (
-                  <button
-                    onClick={handleUndo}
-                    className="flex items-center gap-1 bg-white hover:bg-moss-50 border border-moss-300 px-2.5 py-1 rounded-md text-moss-800 transition cursor-pointer font-medium flex-shrink-0"
-                  >
+                  <button onClick={handleUndo} className="btn btn-secondary !h-7 flex-shrink-0">
                     <RotateCcw className="w-3.5 h-3.5" />
                     Undo
                   </button>
@@ -500,7 +702,7 @@ export default function App() {
               </div>
             )}
 
-            {/* File List / Drag-and-Drop Dropzone */}
+            {/* Table */}
             <div
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={(e) => {
@@ -510,222 +712,94 @@ export default function App() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragActive(false);
-                if (e.dataTransfer.files) {
-                  handleFileUpload(e.dataTransfer.files);
-                }
+                if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
               }}
-              className="relative flex-1 min-h-0 overflow-y-auto p-3 space-y-1.5"
+              className="relative flex-1 min-h-0 flex flex-col"
             >
-              {dragActive && (
-                <div className="sticky top-0 left-0 right-0 z-10 pointer-events-none flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-moss-500 bg-moss-50/95 text-moss-700 font-medium text-sm py-8">
-                  <UploadCloud className="w-10 h-10 mb-2" />
-                  Drop files to upload to this folder
-                </div>
-              )}
-              {loadingFiles ? (
-                <div className="flex items-center justify-center h-48 text-ink-mute text-sm">
-                  Loading Drive files...
-                </div>
-              ) : files.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-ink-mute text-sm">
-                  <Folder className="w-10 h-10 stroke-1 text-moss-300 mb-2" />
-                  No files or folders found here.
-                </div>
-              ) : (
-                files.map((file) => (
-                  <div
-                    key={file.id}
-                    onClick={() => file.isFolder && navigateToFolder(file)}
-                    className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border border-transparent hover:bg-moss-50 hover:border-moss-200 transition ${
-                      file.isFolder ? 'cursor-pointer' : ''
-                    }`}
+              <div className="grid grid-cols-[1fr_5rem] sm:grid-cols-[1fr_6rem_6rem] items-center gap-3 px-6 h-9 border-y border-line bg-sub text-xs text-ink-soft font-medium flex-shrink-0">
+                <span>Name</span>
+                <span className="text-right">Size</span>
+                <span className="hidden sm:flex items-center justify-end relative">
+                  <button
+                    onClick={() => setSortMenu((v) => !v)}
+                    className="flex items-center gap-1 hover:text-ink cursor-pointer"
+                    title="Sort"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {getFileIcon(file)}
-                      <span className="text-sm font-medium truncate">{file.name}</span>
-                    </div>
+                    Modified
+                    <ArrowUpDown className="w-3 h-3" />
+                  </button>
+                  {sortMenu && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setSortMenu(false)} />
+                      <div className="menu absolute right-0 top-full mt-1 z-40 !min-w-[150px] font-normal">
+                        <p className="px-2.5 py-1 text-[11px] text-ink-mute">Sort by</p>
+                        {Object.entries(sortLabels).map(([key, label]) => (
+                          <button
+                            key={key}
+                            className="menu-item"
+                            onClick={() => { setSortKey(key); setSortMenu(false); }}
+                          >
+                            <span className={sortKey === key ? 'text-accent font-medium' : ''}>{label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </span>
+              </div>
 
-                    <div className="flex items-center gap-3 text-xs text-ink-mute flex-shrink-0">
-                      {file.isFolder ? (
-                        <span>Folder</span>
-                      ) : (
-                        <span className="tabular-nums">{file.size ? `${(file.size / 1024).toFixed(1)} KB` : ''}</span>
-                      )}
-                      {file.webViewLink && (
-                        <a
-                          href={file.webViewLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1 rounded hover:bg-moss-100 hover:text-moss-700 transition"
-                          title="Open in Drive"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                    </div>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {dragActive && (
+                  <div className="sticky top-0 z-10 m-3 py-6 border border-dashed border-accent bg-accent-soft rounded-lg text-center text-[13px] text-accent pointer-events-none">
+                    Drop files to upload to this folder
                   </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          {/* Right Panel: AI Chat & Plan Review */}
-          <aside className="w-full lg:w-[440px] h-[36rem] lg:h-auto flex-shrink-0 min-h-0 flex flex-col card rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-moss-100 bg-moss-50/60 flex items-center gap-2">
-              <div className="p-1.5 btn-primary rounded-lg"><Sparkles className="w-3.5 h-3.5" /></div>
-              <h2 className="font-semibold text-sm">AI Organizer Assistant</h2>
-            </div>
-
-            {/* Chat Conversation */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 text-sm">
-              {chatLog.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-                >
-                  <div
-                    className={`max-w-[90%] rounded-2xl px-3.5 py-3 leading-relaxed whitespace-pre-wrap break-words ${
-                      msg.role === 'user'
-                        ? 'btn-primary rounded-br-md'
-                        : 'bg-moss-50 text-ink border border-moss-100 rounded-bl-md'
-                    }`}
-                  >
-                    {msg.text}
+                )}
+                {loadingFiles ? (
+                  <div className="flex items-center justify-center h-48 text-ink-mute text-[13px]">Loading...</div>
+                ) : visibleFiles.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-48 text-ink-mute text-[13px]">
+                    <Folder className="w-8 h-8 stroke-1 mb-2" />
+                    {search.trim() ? 'No files match your search.' : 'This folder is empty.'}
                   </div>
-                </div>
-              ))}
-
-              {analyzing && (
-                <div className="flex items-center gap-2 text-ink-soft text-xs italic bg-moss-50 p-3 rounded-xl border border-moss-100">
-                  <Sparkles className="w-4 h-4 text-moss-500 animate-pulse" />
-                  <span>Scanning files &amp; planning reorganization...</span>
-                </div>
-              )}
-
-              {/* Dry Run Plan Card */}
-              {proposedPlan && (
-                <div className="bg-white border border-moss-300 rounded-2xl p-4 shadow-lg shadow-moss-900/10 ring-4 ring-moss-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-moss-700 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Proposed Plan (Dry-Run)
-                    </span>
-                    <span className="text-xs bg-moss-100 text-moss-800 px-2 py-0.5 rounded-full font-medium">
-                      {proposedPlan.operations.length} actions
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-ink-soft mb-3 leading-relaxed">
-                    Review the actions below before applying changes to your Drive:
-                  </p>
-
-                  <div className="space-y-2 mb-4 max-h-52 overflow-y-auto pr-1">
-                    {proposedPlan.operations.map((op) => (
-                      <div
-                        key={op.id}
-                        className="p-2.5 rounded-lg bg-moss-50 border border-moss-100 text-xs flex flex-col gap-1"
-                      >
-                        {op.type === 'CREATE_FOLDER' && (
-                          <div className="flex items-center gap-2 text-moss-800 font-medium">
-                            <FolderPlus className="w-4 h-4 text-moss-600 flex-shrink-0" />
-                            <span>Create folder: <strong>{op.folder_name}</strong></span>
-                          </div>
-                        )}
-                        {op.type === 'MOVE_FILE' && (
-                          <div className="flex items-center gap-2">
-                            <ArrowRight className="w-4 h-4 text-moss-600 flex-shrink-0" />
-                            <span className="truncate">
-                              Move <strong>{op.file_name}</strong> &rarr; <span className="text-moss-700 font-medium">{op.target_folder_name}</span>
-                            </span>
-                          </div>
-                        )}
-                        {op.type === 'SHARE_FILE' && (
-                          <div className="flex items-center gap-2 text-sky-700">
-                            <Share2 className="w-4 h-4 text-sky-600 flex-shrink-0" />
-                            <span className="truncate">
-                              Share <strong>{op.file_name}</strong> with <strong>{op.email}</strong> ({op.role})
-                            </span>
-                          </div>
-                        )}
-                        {op.type === 'CREATE_DOC' && (
-                          <div className="flex items-center gap-2 text-sky-700">
-                            <FileText className="w-4 h-4 text-sky-600 flex-shrink-0" />
-                            <span>Create Google Doc: <strong>{op.doc_title || op.file_name}</strong></span>
-                          </div>
-                        )}
-                        {op.type === 'EXPORT_PDF' && (
-                          <div className="flex items-center gap-2 text-rose-700">
-                            <FileCheck className="w-4 h-4 text-rose-500 flex-shrink-0" />
-                            <span>Export as PDF: <strong>{op.file_name}</strong></span>
-                          </div>
-                        )}
-                        {op.reason && (
-                          <span className="text-[11px] text-ink-mute italic pl-6">{op.reason}</span>
+                ) : (
+                  visibleFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      onClick={() => file.isFolder && navigateToFolder(file)}
+                      className={`group grid grid-cols-[1fr_5rem] sm:grid-cols-[1fr_6rem_6rem] items-center gap-3 px-6 h-10 border-b border-line hover:bg-hover ${
+                        file.isFolder ? 'cursor-pointer' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {getFileIcon(file)}
+                        <span className="truncate text-[13px]">{file.name}</span>
+                        {file.webViewLink && (
+                          <a
+                            href={file.webViewLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="opacity-0 group-hover:opacity-100 text-ink-mute hover:text-ink flex-shrink-0"
+                            title="Open in Drive"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
                         )}
                       </div>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleExecutePlan}
-                      disabled={executing}
-                      className="btn-primary flex-1 text-xs font-semibold py-2.5 rounded-xl flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>{executing ? 'Executing...' : 'Approve & Execute'}</span>
-                    </button>
-                    <button
-                      onClick={() => setProposedPlan(null)}
-                      disabled={executing}
-                      className="btn-ghost px-4 text-xs font-semibold py-2.5 rounded-xl cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input Bar */}
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-moss-100 bg-moss-50/60">
-              <div className="flex items-center gap-1 bg-white border border-moss-200 rounded-xl pl-3 pr-1.5 py-1 focus-within:border-moss-500 focus-within:ring-2 focus-within:ring-moss-200 transition">
-                <input
-                  type="text"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={isListening ? 'Listening... speak now...' : 'Ask or speak to organize, sort, create folders...'}
-                  className="w-full bg-transparent text-sm text-ink placeholder-ink-mute outline-none py-1.5"
-                  disabled={analyzing}
-                />
-
-                {/* Voice / Mic Button */}
-                <button
-                  type="button"
-                  onClick={toggleVoiceInput}
-                  disabled={analyzing}
-                  title={isListening ? 'Stop listening' : 'Speak your command'}
-                  className={`p-2 rounded-lg transition cursor-pointer ${
-                    isListening
-                      ? 'bg-rose-50 text-rose-600 border border-rose-200 animate-pulse'
-                      : 'text-ink-soft hover:text-moss-700 hover:bg-moss-50'
-                  }`}
-                >
-                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={!prompt.trim() || analyzing}
-                  className="btn-primary p-2 rounded-lg cursor-pointer"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                      <span className="text-right text-xs text-ink-soft tabular-nums">
+                        {file.isFolder ? '' : formatSize(file.size)}
+                      </span>
+                      <span className="hidden sm:block text-right text-xs text-ink-soft">
+                        {formatDate(file.modifiedTime)}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
-            </form>
-          </aside>
+            </div>
+          </main>
+
+          {assistantOpen && assistantPanel}
         </div>
       )}
 
@@ -733,40 +807,34 @@ export default function App() {
       {duplicatesModal && (
         <div className={modalShell}>
           <div className={`${modalCard} max-w-lg flex flex-col max-h-[80vh]`}>
-            <div className="flex items-center justify-between pb-4 border-b border-moss-100">
-              <div className="flex items-center gap-2 text-moss-700">
-                <Copy className="w-5 h-5" />
-                <h3 className="font-bold text-base text-ink">Duplicate Files Detection</h3>
-              </div>
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-semibold text-base">Duplicate files</h3>
               <button
                 onClick={() => setDuplicatesModal(false)}
-                className="btn-ghost text-xs px-2.5 py-1 rounded-md cursor-pointer"
+                className="p-1.5 rounded-md text-ink-mute hover:bg-hover hover:text-ink cursor-pointer"
+                title="Close"
               >
-                ✕ Close
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-4 space-y-3">
+            <div className="flex-1 overflow-y-auto py-3">
               {scanningDuplicates ? (
-                <div className="text-center py-8 text-ink-soft text-sm animate-pulse">
-                  Comparing MD5 checksums and file sizes...
-                </div>
+                <p className="text-center py-8 text-ink-mute text-[13px]">Comparing checksums...</p>
               ) : duplicateList.length === 0 ? (
-                <div className="text-center py-8 text-moss-700 text-sm font-medium">
-                  🎉 No duplicate files found in this folder!
-                </div>
+                <p className="text-center py-8 text-ink-soft text-[13px]">No duplicate files found in this folder.</p>
               ) : (
                 duplicateList.map((item, idx) => (
-                  <div key={idx} className="bg-moss-50 p-3 rounded-xl border border-moss-100 text-xs space-y-2">
-                    <div className="font-medium flex items-center justify-between gap-2">
-                      <span className="truncate">Original: <strong>{item.primary.name}</strong></span>
-                      <span className="text-ink-mute font-mono text-[10px] flex-shrink-0">MD5 match</span>
+                  <div key={idx} className="py-2.5 border-b border-line last:border-b-0 text-[13px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-medium">{item.primary.name}</span>
+                      <span className="text-xs text-ink-mute flex-shrink-0">Original</span>
                     </div>
-                    <div className="pl-3 border-l-2 border-moss-400 space-y-1">
+                    <div className="mt-1 pl-3 border-l border-line space-y-0.5">
                       {item.duplicates.map((dup) => (
-                        <div key={dup.id} className="text-moss-800 flex items-center justify-between gap-2">
-                          <span className="truncate">Duplicate: {dup.name}</span>
-                          <span className="text-[10px] text-ink-mute flex-shrink-0">{(dup.size / 1024).toFixed(1)} KB</span>
+                        <div key={dup.id} className="flex items-center justify-between gap-2 text-ink-soft">
+                          <span className="truncate">{dup.name}</span>
+                          <span className="text-xs text-ink-mute flex-shrink-0">{formatSize(dup.size)}</span>
                         </div>
                       ))}
                     </div>
@@ -775,131 +843,58 @@ export default function App() {
               )}
             </div>
 
-            <div className="pt-3 border-t border-moss-100 flex justify-end">
-              <button
-                onClick={() => setDuplicatesModal(false)}
-                className="btn-primary text-xs px-4 py-2 rounded-lg font-medium cursor-pointer"
-              >
-                Done
-              </button>
+            <div className="pt-3 border-t border-line flex justify-end">
+              <button onClick={() => setDuplicatesModal(false)} className="btn btn-secondary">Close</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Auto-Clean Schedule Modal */}
+      {/* Clean up (schedule) Modal */}
       {scheduleModal && (
         <div className={modalShell}>
           <div className={`${modalCard} max-w-md`}>
-            <div className="flex items-center justify-between pb-4 border-b border-moss-100">
-              <div className="flex items-center gap-2 text-moss-700">
-                <Clock className="w-5 h-5" />
-                <h3 className="font-bold text-base text-ink">Schedule Auto-Clean</h3>
-              </div>
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-semibold text-base">Clean up</h3>
               <button
                 onClick={() => setScheduleModal(false)}
-                className="btn-ghost text-xs px-2.5 py-1 rounded-md cursor-pointer"
+                className="p-1.5 rounded-md text-ink-mute hover:bg-hover hover:text-ink cursor-pointer"
+                title="Close"
               >
-                ✕ Close
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSchedule} className="py-4 space-y-4 text-xs">
+            <form onSubmit={handleSaveSchedule} className="pt-4 space-y-4 text-[13px]">
               <div>
-                <label className="block text-ink-soft mb-1 font-medium">Frequency</label>
-                <select
-                  value={scheduleCron}
-                  onChange={(e) => setScheduleCron(e.target.value)}
-                  className={inputCls}
-                >
+                <label className="block text-ink-soft mb-1">Frequency</label>
+                <select value={scheduleCron} onChange={(e) => setScheduleCron(e.target.value)} className="field">
                   <option value="every_friday">Every Friday at 5:00 PM</option>
-                  <option value="every_day">Daily at Midnight (12:00 AM)</option>
-                  <option value="every_hour">Hourly Maintenance Sweep</option>
+                  <option value="every_day">Daily at midnight</option>
+                  <option value="every_hour">Hourly</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-ink-soft mb-1 font-medium">Target Archive Folder</label>
+                <label className="block text-ink-soft mb-1">Archive folder</label>
                 <input
                   type="text"
                   value={scheduleFolder}
                   onChange={(e) => setScheduleFolder(e.target.value)}
                   placeholder="e.g. Weekly Archive"
-                  className={inputCls}
+                  className="field"
                 />
               </div>
 
-              <p className="text-[11px] text-ink-mute leading-relaxed">
-                The assistant will automatically sweep unorganized root files into this folder on schedule.
+              <p className="text-xs text-ink-mute leading-relaxed">
+                Files left loose in My Drive are moved into this folder on the schedule above.
               </p>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setScheduleModal(false)}
-                  className="btn-ghost px-4 py-2 rounded-lg font-medium cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary px-4 py-2 rounded-lg font-medium cursor-pointer"
-                >
-                  Activate Schedule
-                </button>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setScheduleModal(false)} className="btn btn-secondary">Cancel</button>
+                <button type="submit" className="btn btn-primary">Save schedule</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Account Confirmation Modal */}
-      {deleteAccountModal && (
-        <div className={modalShell}>
-          <div className={`${modalCard} max-w-md`}>
-            <div className="flex items-center gap-3 pb-3 border-b border-rose-100 text-rose-600">
-              <div className="p-2 bg-rose-50 rounded-xl text-rose-500">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-base text-ink">Delete Account & Data</h3>
-                <p className="text-xs text-ink-soft">Permanent account disconnection</p>
-              </div>
-            </div>
-
-            <div className="py-4 space-y-3 text-xs text-ink-soft leading-relaxed">
-              <p>
-                Are you sure you want to delete your account? This action will:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5 text-ink">
-                <li><strong>Revoke Google OAuth Access:</strong> Disconnect Smart Drive Assistant from your Google account immediately.</li>
-                <li><strong>Purge All Stored Data:</strong> Permanently delete your user profile, session tokens, and undo history from our database and disk.</li>
-                <li><strong>Log You Out Completely:</strong> Clear all local browser storage and return to the login screen.</li>
-              </ul>
-              <div className="bg-rose-50 border border-rose-200/80 p-3 rounded-xl text-rose-700 text-[11px]">
-                ⚠️ Your files in Google Drive will remain safe and untouched, but Smart Drive Assistant will no longer have permission to access them.
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-moss-100 flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={deletingAccount}
-                onClick={() => setDeleteAccountModal(false)}
-                className="btn-ghost px-4 py-2 rounded-lg font-medium cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={deletingAccount}
-                onClick={handleDeleteAccount}
-                className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium cursor-pointer shadow-lg shadow-rose-600/20 transition disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{deletingAccount ? 'Deleting...' : 'Yes, Delete My Account'}</span>
-              </button>
-            </div>
           </div>
         </div>
       )}

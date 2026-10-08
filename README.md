@@ -1,6 +1,50 @@
-# Smart Drive Assistant (FastAPI + React + Gemini)
+# 🌿 Smart Drive Assistant
 
-Autonomous AI assistant for Google Drive file organization, folder creation, and batch moving with dry-run safety approvals and one-click undo.
+**Autonomous AI Operating System for Google Drive** powered by **Gemini 3.8 Flash**, **FastAPI**, and **React 19 (Vite + Tailwind CSS)**.
+
+Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn't just read documents—it has **hands to execute**, safely organizing files, creating folder structures, detecting duplicates, and scheduling background maintenance sweeps with full user control, dry-run previews, and one-click instant undo.
+
+---
+
+## ✨ Features Implemented Today
+
+### 1. 🤖 Autonomous Gemini 3.8 Flash Agent
+- **Natural Language Execution**: Direct actions from plain English prompts (*"Find all 2026 invoices and put them into a new Taxes folder"*).
+- **Deep Content-Aware Inspection**: Reads text snippets inside PDFs (via `pypdf`), Google Docs, and Sheets so files are classified by their actual content rather than just names.
+- **Multimodal Voice Input**: Native browser Web Speech API microphone integration in the chat input for hands-free voice commands.
+
+### 2. 🛡️ Safety-First Architecture & Reversibility
+- **Interactive Dry-Run Card**: The agent proposes actions (`CREATE_FOLDER`, `MOVE_FILE`, `RENAME_FILE`, `SHARE_FILE`, `CREATE_DOC`, `EXPORT_PDF`) in a review card with explicit reasons before executing.
+- **1-Click Instant Undo**: Reverts any batch file moves back to their original parent locations with a single click.
+- **Zero Drive Takeover / Privacy**: Files remain 100% inside user Google Drive. No documents or user files are ever stored on our servers.
+
+### 3. 📂 Live Google Drive Explorer & Ingestion
+- **Real-Time Drive Tree Navigation**: Interactive explorer with breadcrumb navigation, type badges, file sizes, and direct links to Drive.
+- **Local-to-Drive File Uploader**:
+  - Top toolbar **Upload Files** button for multi-file desktop uploads.
+  - Full drag-and-drop dropzone directly over the file list container.
+
+### 4. 🔍 Duplicates Detection (MD5 Checksum)
+- Dedicated **Find Duplicates** modal tool that compares exact MD5 hashes and file sizes to identify redundant copies in any folder.
+
+### 5. ⏰ Scheduled Autonomous Maintenance
+- **Auto-Clean Schedule** powered by `APScheduler`:
+  - Configurable frequencies: Every Friday at 5:00 PM, Daily at Midnight, or Hourly Maintenance Sweeps.
+  - Automatically sweeps unorganized loose files into a target archive folder.
+
+### 6. 📤 Sharing & Document Tools
+- **File Sharing**: Grant Editor or Viewer permissions directly from the AI chat (*"Share offer letter with friend@gmail.com as reader"*).
+- **Document Creation & PDF Export**: Create blank Google Docs or export spreadsheets/docs to PDF format.
+
+### 7. 🗑️ Delete Account & Privacy Compliance
+- **1-Click Account Purge**:
+  - Revokes OAuth tokens directly with Google's revocation endpoint (`https://oauth2.googleapis.com/revoke`).
+  - Purges user profile, session credentials, and undo transactions from persistent storage.
+  - Clears browser `localStorage` and completely logs out.
+
+### 8. 🎨 Design System: White & Olive Green Theme
+- Redesigned with custom CSS theme variables (`--color-moss-50` through `--color-moss-900`, `--color-ink`).
+- Clean Inter typography, responsive card layouts, frosted glass headers, and subtle ambient gradients.
 
 ---
 
@@ -8,42 +52,56 @@ Autonomous AI assistant for Google Drive file organization, folder creation, and
 
 ```
 smart-drive-assistant/
-├── .env                       # OAuth credentials & Gemini API key
-├── start.bat                  # One-click launcher for Windows
+├── .env                       # Local secrets (never committed)
+├── .env.example               # Template environment configuration
+├── start.bat                  # One-click Windows local dev launcher
+├── README.md                  # Complete documentation
+│
 ├── backend/
-│   ├── requirements.txt       # FastAPI & Google API dependencies
+│   ├── requirements.txt       # FastAPI, Google APIs, pypdf, APScheduler
+│   ├── storage/               # Persistent JSON session & undo storage
 │   └── app/
 │       ├── config.py          # Environment settings & Drive scopes
-│       ├── schemas.py         # Pydantic models for plans & items
-│       ├── drive_service.py   # Google Drive API v3 operations
-│       ├── agent.py           # Gemini 2.5 Flash agent & plan generator
-│       └── main.py            # FastAPI REST & OAuth routes
+│       ├── schemas.py         # Pydantic models (operations, plans, schedules)
+│       ├── drive_service.py   # Google Drive v3 REST wrapper & OCR helpers
+│       ├── agent.py           # Gemini 3.8 Flash agent & plan synthesizer
+│       └── main.py            # FastAPI REST, OAuth, upload & schedule routes
+│
 └── frontend/
-    ├── package.json
-    ├── vite.config.js
+    ├── package.json           # React 19, Lucide icons, Axios, Tailwind v4
+    ├── vite.config.js         # Vite configuration with 0.0.0.0 host binding
+    ├── index.html             # Inter font & metadata
     └── src/
-        ├── App.jsx            # Explorer UI, Chat & Plan approval
-        └── index.css          # Tailwind CSS styles
+        ├── App.jsx            # Full Dashboard (Explorer, Chat, Modals, Audio)
+        └── index.css          # Tailwind CSS theme & olive green components
 ```
 
 ---
 
-## 🚀 How to Run
+## 🌐 Production Deployments
 
-### Method 1: One-Click Launcher (Recommended)
-Double-click `start.bat` in the project root folder. It will launch both the FastAPI backend and Vite React frontend in separate terminal windows.
+- **Frontend (Vercel)**: `https://smart-drive-assistant-lovat.vercel.app`
+- **Backend (Render)**: `https://smart-drive-assistant.onrender.com`
+- **GitHub Repository**: `https://github.com/trghcj/smart-drive-assistant`
 
-### Method 2: Manual Terminal Run
+---
+
+## 🚀 Running Locally
+
+### Option 1: One-Click Launcher (Windows)
+Double-click `start.bat` in the root folder. Both FastAPI (`http://localhost:8000`) and Vite React (`http://localhost:5173`) will launch automatically in separate terminal windows.
+
+### Option 2: Manual Terminal
 
 1. **Start the FastAPI Backend**:
    ```bash
-   cd "C:\Users\suremdra singh\Desktop\smart-drive-assistant"
-   python -m uvicorn backend.app.main:app --port 8000 --reload
+   cd smart-drive-assistant
+   python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
    ```
 
 2. **Start the React Frontend**:
    ```bash
-   cd "C:\Users\suremdra singh\Desktop\smart-drive-assistant\frontend"
+   cd smart-drive-assistant/frontend
    npm run dev
    ```
 
@@ -51,7 +109,8 @@ Double-click `start.bat` in the project root folder. It will launch both the Fas
 
 ---
 
-## 🔒 Safety Features Included
+## 🔒 Security & Google OAuth Notes
 
-1. **Dry-Run Plan Card**: The AI never moves files behind your back. It presents an interactive review card with the exact folders it intends to create and files it will move.
-2. **One-Click Undo**: After executing any batch organization, an "Undo Action" button lets you revert all moved files back to their original parent locations.
+- Smart Drive Assistant uses Google's official OAuth 2.0 flow with PKCE.
+- During Testing mode, only authorized Test Users listed in Google Cloud Console can sign in.
+- All file manipulations require explicit user confirmation via the dry-run review card.
