@@ -15,15 +15,38 @@ class DriveService:
         )
         self.service = build("drive", "v3", credentials=self.creds)
 
-    def list_files_in_folder(self, folder_id: str = "root", page_size: int = 50) -> List[Dict[str, Any]]:
-        """List contents of a specific folder."""
-        query = f"'{folder_id}' in parents and trashed = false"
-        results = self.service.files().list(
-            q=query,
-            pageSize=page_size,
-            fields="files(id, name, mimeType, size, modifiedTime, parents, webViewLink, iconLink)",
-            orderBy="folder, name"
-        ).execute()
+    def list_files_in_folder(self, folder_id: str = "root", view: str = "my-drive", page_size: int = 60) -> List[Dict[str, Any]]:
+        """List contents of a specific folder or special view (shared, recent, starred, trash)."""
+        if view == "shared":
+            query = "sharedWithMe = true and trashed = false"
+            order = "sharedWithMeTime desc"
+        elif view == "recent":
+            query = "trashed = false and mimeType != 'application/vnd.google-apps.folder'"
+            order = "viewedByMeTime desc"
+        elif view == "starred":
+            query = "starred = true and trashed = false"
+            order = "folder, name"
+        elif view == "trash":
+            query = "trashed = true"
+            order = "trashedTime desc"
+        else:
+            query = f"'{folder_id}' in parents and trashed = false"
+            order = "folder, name"
+
+        try:
+            results = self.service.files().list(
+                q=query,
+                pageSize=page_size,
+                fields="files(id, name, mimeType, size, modifiedTime, parents, webViewLink, iconLink, starred, trashed)",
+                orderBy=order
+            ).execute()
+        except Exception:
+            results = self.service.files().list(
+                q=query,
+                pageSize=page_size,
+                fields="files(id, name, mimeType, size, modifiedTime, parents, webViewLink, iconLink, starred, trashed)"
+            ).execute()
+
         files = results.get("files", [])
         return [
             {
@@ -35,9 +58,27 @@ class DriveService:
                 "modifiedTime": f.get("modifiedTime"),
                 "parents": f.get("parents", []),
                 "webViewLink": f.get("webViewLink"),
+                "starred": f.get("starred", False),
+                "trashed": f.get("trashed", False),
             }
             for f in files
         ]
+
+    def toggle_star_file(self, file_id: str, starred: bool = True) -> Dict[str, Any]:
+        """Star or unstar a file."""
+        return self.service.files().update(
+            fileId=file_id,
+            body={"starred": starred},
+            fields="id, name, starred"
+        ).execute()
+
+    def toggle_trash_file(self, file_id: str, trashed: bool = True) -> Dict[str, Any]:
+        """Move a file to trash or restore it."""
+        return self.service.files().update(
+            fileId=file_id,
+            body={"trashed": trashed},
+            fields="id, name, trashed"
+        ).execute()
 
     def search_files(self, text_query: str = "", mime_type: Optional[str] = None, page_size: int = 40) -> List[Dict[str, Any]]:
         """Search files by name, full-text or mimeType."""

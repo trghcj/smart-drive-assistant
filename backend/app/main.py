@@ -176,11 +176,32 @@ def delete_account(session_id: str = Query(...)):
 # ----------------- DRIVE EXPLORER ROUTES -----------------
 
 @app.get("/api/drive/files")
-def list_files(folder_id: str = "root", session_id: str = Query(...)):
-    """List files and folders inside specified folder."""
+def list_files(folder_id: str = "root", view: str = "my-drive", session_id: str = Query(...)):
+    """List files and folders inside specified folder or navigation view."""
     drive = get_drive_service(session_id)
-    files = drive.list_files_in_folder(folder_id=folder_id)
+    files = drive.list_files_in_folder(folder_id=folder_id, view=view)
     return {"files": files}
+
+@app.post("/api/drive/star")
+def star_file(file_id: str = Query(...), starred: bool = Query(True), session_id: str = Query(...)):
+    """Star or unstar a file."""
+    drive = get_drive_service(session_id)
+    res = drive.toggle_star_file(file_id=file_id, starred=starred)
+    return {"success": True, "file": res}
+
+@app.post("/api/drive/trash")
+def trash_file(file_id: str = Query(...), trashed: bool = Query(True), session_id: str = Query(...)):
+    """Move file to trash or restore."""
+    drive = get_drive_service(session_id)
+    res = drive.toggle_trash_file(file_id=file_id, trashed=trashed)
+    return {"success": True, "file": res}
+
+@app.post("/api/drive/create-folder")
+def create_new_folder(folder_name: str = Query(...), parent_id: str = Query("root"), session_id: str = Query(...)):
+    """Quickly create a folder."""
+    drive = get_drive_service(session_id)
+    res = drive.create_folder(folder_name=folder_name, parent_id=parent_id)
+    return {"success": True, "folder": res}
 
 @app.get("/api/drive/search")
 def search_drive(q: str = "", session_id: str = Query(...)):

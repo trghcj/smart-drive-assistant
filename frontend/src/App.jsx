@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
   Folder,
+  FolderPlus,
   FileText,
   FileSpreadsheet,
   FileImage,
@@ -32,7 +33,9 @@ import {
   ExternalLink,
   ShieldCheck,
   Zap,
-  FolderSync
+  FolderSync,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -54,6 +57,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
   const [selectedNav, setSelectedNav] = useState('my-drive');
   const [selectedFileIds, setSelectedFileIds] = useState(new Set());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Assistant & Chat state
   const [assistantOpen, setAssistantOpen] = useState(true);
@@ -81,6 +85,9 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [deleteAccountModal, setDeleteAccountModal] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [newFolderModal, setNewFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const chatEndRef = useRef(null);
   const promptInputRef = useRef(null);
@@ -104,9 +111,9 @@ export default function App() {
   useEffect(() => {
     if (sessionId) {
       fetchUserProfile();
-      fetchFiles(currentFolder);
+      fetchFiles(currentFolder, selectedNav);
     }
-  }, [sessionId, currentFolder]);
+  }, [sessionId, currentFolder, selectedNav]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -152,10 +159,10 @@ export default function App() {
     }
   };
 
-  const fetchFiles = async (folderId) => {
+  const fetchFiles = async (folderId = currentFolder, navView = selectedNav) => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get(`${API_BASE}/drive/files?folder_id=${folderId}&session_id=${sessionId}`);
+      const res = await axios.get(`${API_BASE}/drive/files?folder_id=${folderId}&view=${navView}&session_id=${sessionId}`);
       setFiles(res.data.files || []);
       setSelectedFileIds(new Set());
     } catch (err) {
@@ -165,15 +172,90 @@ export default function App() {
     }
   };
 
+  const handleSelectNav = (navId) => {
+    setSelectedNav(navId);
+    if (navId === 'my-drive') {
+      setCurrentFolder('root');
+      setFolderHistory([{ id: 'root', name: 'My Drive' }]);
+      fetchFiles('root', 'my-drive');
+    } else if (navId === 'shared') {
+      setCurrentFolder('shared');
+      setFolderHistory([{ id: 'shared', name: 'Shared with me' }]);
+      fetchFiles('root', 'shared');
+    } else if (navId === 'recent') {
+      setCurrentFolder('recent');
+      setFolderHistory([{ id: 'recent', name: 'Recent' }]);
+      fetchFiles('root', 'recent');
+    } else if (navId === 'starred') {
+      setCurrentFolder('starred');
+      setFolderHistory([{ id: 'starred', name: 'Starred' }]);
+      fetchFiles('root', 'starred');
+    } else if (navId === 'trash') {
+      setCurrentFolder('trash');
+      setFolderHistory([{ id: 'trash', name: 'Trash' }]);
+      fetchFiles('root', 'trash');
+    }
+  };
+
   const navigateToFolder = (folder) => {
     setCurrentFolder(folder.id);
+    setSelectedNav('my-drive');
     setFolderHistory((prev) => [...prev, folder]);
+    fetchFiles(folder.id, 'my-drive');
   };
 
   const navigateBreadcrumb = (index) => {
     const target = folderHistory[index];
     setFolderHistory((prev) => prev.slice(0, index + 1));
-    setCurrentFolder(target.id);
+    if (['shared', 'recent', 'starred', 'trash'].includes(target.id)) {
+      handleSelectNav(target.id);
+    } else {
+      setSelectedNav('my-drive');
+      setCurrentFolder(target.id);
+      fetchFiles(target.id, 'my-drive');
+    }
+  };
+
+  const handleToggleStar = async (file, e) => {
+    e?.stopPropagation();
+    try {
+      const newStarred = !file.starred;
+      await axios.post(`${API_BASE}/drive/star?file_id=${file.id}&starred=${newStarred}&session_id=${sessionId}`);
+      setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, starred: newStarred } : f)));
+    } catch (err) {
+      console.error('Error toggling star:', err);
+    }
+  };
+
+  const handleToggleTrash = async (file, e) => {
+    e?.stopPropagation();
+    const isTrashed = file.trashed;
+    const msg = isTrashed ? `Restore "${file.name}"?` : `Move "${file.name}" to Trash?`;
+    if (!window.confirm(msg)) return;
+    try {
+      await axios.post(`${API_BASE}/drive/trash?file_id=${file.id}&trashed=${!isTrashed}&session_id=${sessionId}`);
+      fetchFiles(currentFolder, selectedNav);
+    } catch (err) {
+      console.error('Error updating trash state:', err);
+    }
+  };
+
+  const handleCreateFolder = async (e) => {
+    e?.preventDefault();
+    if (!newFolderName.trim() || creatingFolder) return;
+    setCreatingFolder(true);
+    try {
+      await axios.post(
+        `${API_BASE}/drive/create-folder?folder_name=${encodeURIComponent(newFolderName.trim())}&parent_id=${currentFolder}&session_id=${sessionId}`
+      );
+      setNewFolderName('');
+      setNewFolderModal(false);
+      fetchFiles(currentFolder, selectedNav);
+    } catch (err) {
+      alert(`Error creating folder: ${err.message}`);
+    } finally {
+      setCreatingFolder(false);
+    }
   };
 
   const handleFileUpload = async (filesToUpload) => {
@@ -373,6 +455,18 @@ export default function App() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const formatStorage = (bytes) => {
+    if (!bytes) return '0 B';
+    const n = Number(bytes);
+    if (isNaN(n)) return '0 B';
+    if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    return `${Math.round(n / 1024 / 1024)} MB`;
+  };
+
+  const usedBytes = Number(quota?.usage || 0);
+  const limitBytes = Number(quota?.limit || 16106127360);
+  const usedPercent = limitBytes > 0 ? Math.min(100, Math.round((usedBytes / limitBytes) * 100)) : 0;
+
   const getFileIcon = (item) => {
     if (item.isFolder) {
       return (
@@ -420,14 +514,29 @@ export default function App() {
     <div className="h-screen w-screen overflow-hidden bg-[#f7f8f6] text-[#2c3327] font-sans flex flex-col antialiased">
       {/* ================= TOP NAVBAR ================= */}
       <header className="h-16 px-6 bg-white border-b border-[#e5e8e1] flex items-center justify-between gap-4 flex-shrink-0 z-30">
-        {/* Brand */}
-        <div className="flex items-center gap-2.5 min-w-[200px]">
-          <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-            </svg>
-          </div>
-          <span className="font-semibold text-lg tracking-tight text-[#1e2419]">Smart Drive</span>
+        {/* Brand & Sidebar Toggle */}
+        <div className="flex items-center gap-2 min-w-[200px]">
+          {sessionId && (
+            <button
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              className="p-2 rounded-xl text-[#6b7362] hover:bg-[#f2f4ef] hover:text-[#1e2419] transition cursor-pointer"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+            </button>
+          )}
+          <button
+            onClick={() => handleSelectNav('my-drive')}
+            className="flex items-center gap-2.5 hover:opacity-90 transition cursor-pointer text-left"
+            title="Go to My Drive"
+          >
+            <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+            </div>
+            <span className="font-semibold text-lg tracking-tight text-[#1e2419]">Smart Drive</span>
+          </button>
         </div>
 
         {/* Search Bar */}
@@ -563,10 +672,14 @@ export default function App() {
         /* 3-COLUMN DASHBOARD (SIDEBAR + FILE MANAGER + ASSISTANT) */
         <div className="flex-1 min-h-0 flex overflow-hidden">
           {/* ================= LEFT SIDEBAR ================= */}
-          <aside className="w-60 bg-white border-r border-[#e5e8e1] flex flex-col justify-between p-4 flex-shrink-0 h-full overflow-y-auto">
-            <div className="space-y-6">
+          <aside
+            className={`bg-white border-r border-[#e5e8e1] flex flex-col justify-between flex-shrink-0 h-full overflow-y-auto transition-all duration-200 ${
+              sidebarCollapsed ? 'w-16 p-2 items-center' : 'w-60 p-4'
+            }`}
+          >
+            <div className="space-y-6 w-full">
               {/* Primary Nav */}
-              <nav className="space-y-1">
+              <nav className="space-y-1 w-full">
                 {[
                   { id: 'my-drive', label: 'My Drive', icon: HardDrive },
                   { id: 'shared', label: 'Shared with me', icon: Users },
@@ -579,56 +692,98 @@ export default function App() {
                   return (
                     <button
                       key={item.id}
-                      onClick={() => setSelectedNav(item.id)}
-                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      onClick={() => handleSelectNav(item.id)}
+                      title={item.label}
+                      className={`w-full flex items-center rounded-xl text-xs font-medium transition cursor-pointer ${
+                        sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'
+                      } ${
                         active
                           ? 'bg-[#edf2e4] text-[#3d4d23] font-semibold'
                           : 'text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419]'
                       }`}
                     >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      {!sidebarCollapsed && <span>{item.label}</span>}
                     </button>
                   );
                 })}
               </nav>
 
               {/* Tools Section */}
-              <div>
-                <p className="text-[10px] uppercase font-bold tracking-wider text-[#8a9282] px-3.5 mb-2">Tools</p>
-                <div className="space-y-1">
+              <div className="w-full">
+                {!sidebarCollapsed ? (
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-[#8a9282] px-3.5 mb-2">Tools</p>
+                ) : (
+                  <div className="h-px bg-[#f0f2eb] my-2 w-full" />
+                )}
+                <div className="space-y-1 w-full">
                   <button
                     onClick={handleScanDuplicates}
-                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer"
+                    title="Find duplicates"
+                    className={`w-full flex items-center rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer ${
+                      sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'
+                    }`}
                   >
-                    <Copy className="w-4 h-4 text-[#7b8371]" />
-                    <span>Find duplicates</span>
+                    <Copy className="w-4 h-4 text-[#7b8371] flex-shrink-0" />
+                    {!sidebarCollapsed && <span>Find duplicates</span>}
                   </button>
                   <button
                     onClick={() => setScheduleModal(true)}
-                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer"
+                    title="Clean up"
+                    className={`w-full flex items-center rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer ${
+                      sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'
+                    }`}
                   >
-                    <Zap className="w-4 h-4 text-[#7b8371]" />
-                    <span>Clean up</span>
+                    <Zap className="w-4 h-4 text-[#7b8371] flex-shrink-0" />
+                    {!sidebarCollapsed && <span>Clean up</span>}
                   </button>
                   <button
-                    onClick={() => setAssistantOpen(true)}
-                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer"
+                    onClick={() => {
+                      setAssistantOpen(true);
+                      setTimeout(() => promptInputRef.current?.focus(), 100);
+                    }}
+                    title="Assistant"
+                    className={`w-full flex items-center rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer ${
+                      sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'
+                    }`}
                   >
-                    <Sparkles className="w-4 h-4 text-[#4d602c]" />
-                    <span>Assistant</span>
+                    <Sparkles className="w-4 h-4 text-[#4d602c] flex-shrink-0" />
+                    {!sidebarCollapsed && <span>Assistant</span>}
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Storage Progress */}
-            <div className="p-3 bg-[#f7f8f6] rounded-2xl border border-[#e5e8e1]">
-              <div className="flex items-center gap-2 text-xs font-medium text-[#3d4d23]">
-                <HardDrive className="w-4 h-4" />
-                <span>Storage</span>
-              </div>
-              <p className="text-[11px] text-[#8a9282] mt-1">2.4 GB used</p>
+            <div className="w-full">
+              {sidebarCollapsed ? (
+                <div
+                  className="p-2 bg-[#f7f8f6] rounded-xl border border-[#e5e8e1] flex flex-col items-center justify-center text-[10px] text-[#3d4d23]"
+                  title={`Storage: ${formatStorage(quota?.usage)} of ${formatStorage(quota?.limit)} used`}
+                >
+                  <HardDrive className="w-4 h-4 mb-1 text-[#4d602c]" />
+                  <span className="font-semibold">{usedPercent}%</span>
+                </div>
+              ) : (
+                <div className="p-3 bg-[#f7f8f6] rounded-2xl border border-[#e5e8e1]">
+                  <div className="flex items-center justify-between text-xs font-medium text-[#3d4d23]">
+                    <div className="flex items-center gap-2">
+                      <HardDrive className="w-4 h-4" />
+                      <span>Storage</span>
+                    </div>
+                    <span className="text-[10px] text-[#8a9282] font-semibold">{usedPercent}%</span>
+                  </div>
+                  <div className="w-full bg-[#e5e8e1] rounded-full h-1.5 mt-2 overflow-hidden">
+                    <div
+                      className="bg-[#4d602c] h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${usedPercent}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-[#8a9282] mt-1.5">
+                    {formatStorage(quota?.usage)} of {formatStorage(quota?.limit)} used
+                  </p>
+                </div>
+              )}
             </div>
           </aside>
 
@@ -656,7 +811,7 @@ export default function App() {
               {/* Action Buttons */}
               <div className="flex items-center gap-2">
                 {/* Upload Button */}
-                <label className="flex items-center gap-2 px-3.5 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white text-xs font-medium rounded-xl transition cursor-pointer shadow-sm">
+                <label className="flex items-center gap-1.5 px-3.5 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white text-xs font-medium rounded-xl transition cursor-pointer shadow-sm">
                   <Plus className="w-3.5 h-3.5" />
                   <span>{uploading ? 'Uploading...' : 'Upload'}</span>
                   <input
@@ -671,6 +826,16 @@ export default function App() {
                   />
                 </label>
 
+                {/* New Folder Button */}
+                <button
+                  onClick={() => setNewFolderModal(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] text-[#2c3327] text-xs font-medium rounded-xl transition cursor-pointer"
+                  title="Create new folder"
+                >
+                  <FolderPlus className="w-3.5 h-3.5 text-[#6b7362]" />
+                  <span>Folder</span>
+                </button>
+
                 {/* Organize Dropdown */}
                 <div className="relative">
                   <button
@@ -684,7 +849,7 @@ export default function App() {
                   {organizeMenu && (
                     <>
                       <div className="fixed inset-0 z-30" onClick={() => setOrganizeMenu(false)} />
-                      <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-[#e5e8e1] rounded-2xl shadow-xl py-2 z-40 text-xs text-[#2c3327]">
+                      <div className="absolute right-0 top-full mt-1.5 w-60 bg-white border border-[#e5e8e1] rounded-2xl shadow-xl py-2 z-40 text-xs text-[#2c3327]">
                         <button
                           onClick={() => { setOrganizeMenu(false); handleScanDuplicates(); }}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
@@ -700,8 +865,28 @@ export default function App() {
                           <span>Schedule clean up</span>
                         </button>
                         <button
-                          onClick={() => { setOrganizeMenu(false); openAssistantWith(); }}
+                          onClick={() => {
+                            setOrganizeMenu(false);
+                            openAssistantWith("Organize all files in this folder into categorized folders by file type (Documents, Images, Spreadsheets, etc.)");
+                          }}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
+                        >
+                          <FolderSync className="w-4 h-4 text-[#4d602c]" />
+                          <span>Organize by type</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setOrganizeMenu(false);
+                            openAssistantWith("Organize all files in this folder by year and month into archive folders");
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
+                        >
+                          <Clock className="w-4 h-4 text-[#4d602c]" />
+                          <span>Organize by date</span>
+                        </button>
+                        <button
+                          onClick={() => { setOrganizeMenu(false); openAssistantWith(); }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer border-t border-[#f2f4ef] mt-1 pt-2"
                         >
                           <Sparkles className="w-4 h-4 text-[#4d602c]" />
                           <span>Ask Assistant to sort</span>
@@ -713,7 +898,7 @@ export default function App() {
 
                 {/* Refresh */}
                 <button
-                  onClick={() => fetchFiles(currentFolder)}
+                  onClick={() => fetchFiles(currentFolder, selectedNav)}
                   className="p-2 text-[#6b7362] hover:bg-[#f7f8f6] rounded-xl border border-[#e5e8e1] transition cursor-pointer"
                   title="Refresh folder"
                 >
@@ -725,12 +910,14 @@ export default function App() {
                   <button
                     onClick={() => setViewMode('list')}
                     className={`p-1.5 rounded-lg transition ${viewMode === 'list' ? 'bg-[#edf2e4] text-[#3d4d23]' : 'text-[#8a9282] hover:text-[#1e2419]'}`}
+                    title="List view"
                   >
                     <List className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => setViewMode('grid')}
                     className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-[#edf2e4] text-[#3d4d23]' : 'text-[#8a9282] hover:text-[#1e2419]'}`}
+                    title="Grid view"
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
                   </button>
@@ -811,18 +998,36 @@ export default function App() {
                               className="rounded text-[#4d602c] focus:ring-[#4d602c]"
                             />
                           </div>
-                          {item.webViewLink && (
-                            <a
-                              href={item.webViewLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-[#8a9282] hover:text-[#4d602c] p-1 opacity-0 group-hover:opacity-100 transition"
-                              title="Open in Drive"
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              onClick={(e) => handleToggleStar(item, e)}
+                              className={`p-1 rounded hover:bg-[#f2f4ef] transition cursor-pointer ${
+                                item.starred ? 'text-amber-500' : 'text-[#8a9282] opacity-0 group-hover:opacity-100'
+                              }`}
+                              title={item.starred ? 'Unstar' : 'Star'}
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          )}
+                              <Star className={`w-3.5 h-3.5 ${item.starred ? 'fill-amber-500' : ''}`} />
+                            </button>
+                            <button
+                              onClick={(e) => handleToggleTrash(item, e)}
+                              className="p-1 rounded hover:bg-rose-50 text-[#8a9282] hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                              title={item.trashed ? 'Restore' : 'Move to Trash'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            {item.webViewLink && (
+                              <a
+                                href={item.webViewLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[#8a9282] hover:text-[#4d602c] p-1 opacity-0 group-hover:opacity-100 transition"
+                                title="Open in Drive"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
                         </div>
 
                         <div className="flex flex-col items-center justify-center py-2 text-center">
@@ -856,7 +1061,7 @@ export default function App() {
                       <th className="py-2.5 px-2">Name ↑</th>
                       <th className="py-2.5 px-2 w-28">Size</th>
                       <th className="py-2.5 px-2 w-32">Modified</th>
-                      <th className="py-2.5 px-2 w-8"></th>
+                      <th className="py-2.5 px-2 w-24 text-right"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f7f8f6]">
@@ -889,18 +1094,36 @@ export default function App() {
                           <td className="py-3 px-2 text-[#8a9282]">{formatSize(item.size)}</td>
                           <td className="py-3 px-2 text-[#8a9282]">{formatDate(item.modifiedTime)}</td>
                           <td className="py-3 px-2 text-right">
-                            {item.webViewLink && (
-                              <a
-                                href={item.webViewLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-[#8a9282] hover:text-[#4d602c] p-1 inline-block"
-                                title="Open in Google Drive"
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={(e) => handleToggleStar(item, e)}
+                                className={`p-1 rounded hover:bg-[#f2f4ef] transition cursor-pointer ${
+                                  item.starred ? 'text-amber-500' : 'text-[#8a9282] opacity-0 group-hover:opacity-100'
+                                }`}
+                                title={item.starred ? 'Unstar' : 'Star'}
                               >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            )}
+                                <Star className={`w-3.5 h-3.5 ${item.starred ? 'fill-amber-500' : ''}`} />
+                              </button>
+                              <button
+                                onClick={(e) => handleToggleTrash(item, e)}
+                                className="p-1 rounded hover:bg-rose-50 text-[#8a9282] hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                title={item.trashed ? 'Restore' : 'Move to Trash'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                              {item.webViewLink && (
+                                <a
+                                  href={item.webViewLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[#8a9282] hover:text-[#4d602c] p-1 inline-block"
+                                  title="Open in Google Drive"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1297,6 +1520,44 @@ export default function App() {
                 {deletingAccount ? 'Deleting...' : 'Yes, Delete My Account'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Folder Modal */}
+      {newFolderModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-[#e5e8e1] rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+            <h3 className="font-bold text-base text-[#1e2419] mb-4 flex items-center gap-2">
+              <FolderPlus className="w-5 h-5 text-[#4d602c]" />
+              New Folder
+            </h3>
+            <form onSubmit={handleCreateFolder} className="space-y-4">
+              <input
+                type="text"
+                autoFocus
+                placeholder="Folder name"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                className="w-full p-2.5 text-xs bg-[#f7f8f6] border border-[#e5e8e1] rounded-xl focus:outline-none focus:border-[#4d602c]"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setNewFolderModal(false)}
+                  className="px-4 py-2 bg-white border border-[#e5e8e1] rounded-xl text-xs text-[#6b7362] hover:bg-[#f7f8f6] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newFolderName.trim() || creatingFolder}
+                  className="px-4 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl text-xs font-medium transition cursor-pointer disabled:opacity-50"
+                >
+                  {creatingFolder ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
