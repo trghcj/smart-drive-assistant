@@ -127,6 +127,108 @@ class DriveService:
         ).execute()
         return uploaded
 
+    def get_file_content_snippet(self, file_id: str, mime_type: str, max_chars: int = 1500) -> str:
+        """Extract text snippet from Docs, Sheets, or PDFs for content-aware sorting."""
+        try:
+            # 1. Google Doc / Sheet / Presentation -> export as plain text
+            if "google-apps.document" in mime_type or "google-apps.kix" in mime_type:
+                res = self.service.files().export(fileId=file_id, mimeType="text/plain").execute()
+                return res.decode("utf-8", errors="ignore")[:max_chars] if isinstance(res, bytes) else str(res)[:max_chars]
+            elif "google-apps.spreadsheet" in mime_type:
+                res = self.service.files().export(fileId=file_id, mimeType="text/csv").execute()
+                return res.decode("utf-8", errors="ignore")[:max_chars] if isinstance(res, bytes) else str(res)[:max_chars]
+            # 2. Binary PDF file -> download and extract with pypdf
+            elif "pdf" in mime_type:
+                import io
+                from pypdf import PdfReader
+                content = self.service.files().get_media(fileId=file_id).execute()
+                reader = PdfReader(io.BytesIO(content))
+                text = ""
+                for page in reader.pages[:3]:
+                    text += page.extract_text() or ""
+                    if len(text) >= max_chars:
+                        break
+                return text[:max_chars]
+            # 3. Plain text / Markdown / CSV
+            elif "text/" in mime_type or "csv" in mime_type or "json" in mime_type:
+                content = self.service.files().get_media(fileId=file_id).execute()
+                return content.decode("utf-8", errors="ignore")[:max_chars]
+        except Exception as e:
+            return f"[Snippet extraction unavailable: {str(e)}]"
+        return ""
+
+    def find_duplicates(self, folder_id: str = "root") -> List[Dict[str, Any]]:
+        """Find duplicate files in folder by MD5 checksum and filename matching."""
+        query = f"'{folder_id}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'"
+        results = self.service.files().list(
+            q=query,
+            pageSize=100,
+            fields="files(id, name, mimeType, size, md5Checksum, modifiedTime, webViewLink)"
+        ).execute()
+        files = results.get("files", [])
+        
+        # Group by md5 or (name + size)
+        hashes: Dict[str, List[Dict[str, Any]]] = {}
+        duplicates: List[Dict[str, Any]] = []
+
+        for f in files:
+            key = f.get("md5Checksum") or f"{f['name']}_{f.get('size')}"
+            if key not in hashes:
+                hashes[key] = []
+            hashes[key].append(f)
+
+        for key, group in hashes.items():
+            if len(group) > 1:
+                # Keep first as primary, others as duplicates
+                duplicates.append({
+                    "primary": group[0],
+                    "duplicates": group[1:]
+                })
+        return duplicates
+
+    def share_file(self, file_id: str, email: str, role: str = "reader") -> Dict[str, Any]:
+        """Share a file/folder with an email (role: 'reader', 'commenter', 'writer')."""
+        permission = {
+            "type": "user",
+            "role": role,
+            "emailAddress": email
+        }
+        return self.service.permissions().create(
+            fileId=file_id,
+            body=permission,
+            fields="id, emailAddress, role",
+            sendNotificationEmail=True
+        ).execute()
+
+    def create_google_doc(self, title: str, parent_folder_id: str = "root") -> Dict[str, Any]:
+        """Create a new Google Doc."""
+        file_metadata = {
+            "name": title,
+            "mimeType": "application/vnd.google-apps.document",
+            "parents": [parent_folder_id]
+        }
+        return self.service.files().create(
+            body=file_metadata,
+            fields="id, name, mimeType, webViewLink"
+        ).execute()
+
+    def export_doc_as_pdf(self, file_id: str, filename: str, target_folder_id: str = "root") -> Dict[str, Any]:
+        """Export Google Doc or Sheet as PDF and save directly to Drive."""
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+
+        pdf_bytes = self.service.files().export(fileId=file_id, mimeType="application/pdf").execute()
+        file_metadata = {
+            "name": f"{filename}.pdf" if not filename.endswith(".pdf") else filename,
+            "parents": [target_folder_id]
+        }
+        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype="application/pdf", resumable=True)
+        return self.service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id, name, mimeType, webViewLink"
+        ).execute()
+
     def get_about_info(self) -> Dict[str, Any]:
         """Get drive user & storage quota info."""
         return self.service.about().get(fields="user, storageQuota").execute()

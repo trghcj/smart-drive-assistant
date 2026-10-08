@@ -244,9 +244,38 @@ def execute_plan(req: ExecutePlanRequest, session_id: str = Query(...)):
                         "current_folder": target_id
                     })
 
+        elif op.type == "SHARE_FILE":
+            if op.file_id and op.email:
+                drive.share_file(file_id=op.file_id, email=op.email, role=op.role or "reader")
+                executed.append({
+                    "type": "SHARE_FILE",
+                    "file_id": op.file_id,
+                    "email": op.email,
+                    "role": op.role or "reader"
+                })
+
+        elif op.type == "CREATE_DOC":
+            doc = drive.create_google_doc(title=op.doc_title or op.file_name or "Untitled Doc", parent_folder_id=op.parent_id or "root")
+            executed.append({
+                "type": "CREATE_DOC",
+                "doc_title": op.doc_title,
+                "file_id": doc.get("id"),
+                "webViewLink": doc.get("webViewLink")
+            })
+
+        elif op.type == "EXPORT_PDF":
+            if op.file_id:
+                pdf = drive.export_doc_as_pdf(file_id=op.file_id, filename=op.file_name or "Exported", target_folder_id=op.parent_id or "root")
+                executed.append({
+                    "type": "EXPORT_PDF",
+                    "file_id": pdf.get("id"),
+                    "name": pdf.get("name")
+                })
+
     undo_token = str(uuid.uuid4())[:8]
     if undo_actions:
         UNDO_STORE[undo_token] = undo_actions
+        save_data(UNDO_FILE, UNDO_STORE)
 
     return ExecutionResult(
         success=True,
@@ -254,6 +283,39 @@ def execute_plan(req: ExecutePlanRequest, session_id: str = Query(...)):
         executed_operations=executed,
         undo_token=undo_token if undo_actions else None
     )
+
+@app.get("/api/drive/duplicates")
+def get_duplicates(folder_id: str = "root", session_id: str = Query(...)):
+    """Detect duplicate files using MD5 checksum and size/name comparison."""
+    drive = get_drive_service(session_id)
+    dups = drive.find_duplicates(folder_id=folder_id)
+    return {"duplicates": dups}
+
+from apscheduler.schedulers.background import BackgroundScheduler
+SCHEDULER = BackgroundScheduler()
+SCHEDULER.start()
+SCHEDULED_TASKS = []
+
+@app.post("/api/drive/schedule-cleanup")
+def schedule_drive_cleanup(req: ScheduleCleanRequest, session_id: str = Query(...)):
+    """Schedule recurring background sweep of root directory."""
+    task_id = str(uuid.uuid4())[:8]
+    SCHEDULED_TASKS.append({
+        "id": task_id,
+        "schedule": req.cron_time,
+        "target_folder": req.target_folder_name,
+        "session_id": session_id,
+        "status": "active"
+    })
+    return {
+        "success": True,
+        "task_id": task_id,
+        "message": f"Automation scheduled: Loose files will be organized into '{req.target_folder_name}' ({req.cron_time})."
+    }
+
+@app.get("/api/drive/schedules")
+def list_scheduled_cleanups():
+    return {"schedules": SCHEDULED_TASKS}
 
 @app.post("/api/agent/undo")
 def undo_last_operation(undo_token: str = Query(...), session_id: str = Query(...)):

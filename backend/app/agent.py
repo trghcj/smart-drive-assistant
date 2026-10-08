@@ -20,56 +20,54 @@ class DriveAgent:
         # 1. Fetch current context: files in root / current folder
         current_files = self.drive.list_files_in_folder(folder_id=current_folder_id, page_size=60)
         
-        # 2. System Prompt instructing Gemini to produce structured reorganization plan
+        # 2. Extract content snippets for documents to enable deep content-aware sorting
+        files_with_context = []
+        for f in current_files[:30]:
+            snippet = ""
+            if not f["isFolder"]:
+                snippet = self.drive.get_file_content_snippet(f["id"], f["mimeType"], max_chars=400)
+            files_with_context.append({
+                "id": f["id"],
+                "name": f["name"],
+                "mimeType": f["mimeType"],
+                "isFolder": f["isFolder"],
+                "modifiedTime": f.get("modifiedTime"),
+                "content_preview": snippet if snippet else None
+            })
+
+        # 3. System Prompt instructing Gemini with full suite of actions
         system_instruction = (
-            "You are Smart Drive Assistant, an autonomous Google Drive file manager.\n"
-            "The user will give you an instruction like 'Organize my invoices into a folder called 2026 Invoices', "
-            "or 'Sort loose PDFs into Documents folder', etc.\n"
-            "You must inspect the provided list of files in the current folder, select relevant files, "
-            "and output a structured plan of operations.\n"
-            "Allowed operation types: 'CREATE_FOLDER', 'MOVE_FILE', 'RENAME_FILE'.\n"
+            "You are Smart Drive Assistant, an autonomous Google Drive file manager with deep content inspection.\n"
+            "You can analyze file contents (PDFs, Docs, Sheets), identify duplicates, and execute organization plans.\n"
+            "Supported operation types:\n"
+            "- 'CREATE_FOLDER': { folder_name, parent_id, reason }\n"
+            "- 'MOVE_FILE': { file_id, file_name, source_folder_id, target_folder_name, reason }\n"
+            "- 'RENAME_FILE': { file_id, file_name, new_name, reason }\n"
+            "- 'SHARE_FILE': { file_id, file_name, email, role: 'reader'|'writer', reason }\n"
+            "- 'CREATE_DOC': { doc_title, parent_id, reason }\n"
+            "- 'EXPORT_PDF': { file_id, file_name, reason }\n\n"
             "Format your response as valid JSON matching this schema:\n"
             "{\n"
-            '  "explanation": "Clear explanation of what you plan to do",\n'
+            '  "explanation": "Clear summary of the organization plan and insights from document contents",\n'
             '  "operations": [\n'
             '    {\n'
             '      "id": "unique-uuid-str",\n'
-            '      "type": "CREATE_FOLDER",\n'
-            '      "folder_name": "Folder Name",\n'
-            '      "parent_id": "root",\n'
-            '      "reason": "Why this folder is created"\n'
-            '    },\n'
-            '    {\n'
-            '      "id": "unique-uuid-str",\n'
-            '      "type": "MOVE_FILE",\n'
-            '      "file_id": "original-file-id",\n'
-            '      "file_name": "filename.pdf",\n'
-            '      "source_folder_id": "current-folder-id",\n'
-            '      "target_folder_name": "Target Folder Name",\n'
-            '      "reason": "Why this file belongs in that folder"\n'
+            '      "type": "OPERATION_TYPE",\n'
+            '      ...\n'
             '    }\n'
             '  ]\n'
             "}\n"
-            "Important Rules:\n"
-            "1. Only propose moving files that actually exist in the provided file list.\n"
-            "2. If you need a new folder, include a CREATE_FOLDER operation before MOVE_FILE operations that target it.\n"
-            "3. If the user request is just a question, return an empty operations list with the answer in 'explanation'.\n"
-            "4. Return ONLY valid raw JSON without markdown code fences or backticks."
+            "Rules:\n"
+            "1. Inspect 'content_preview' to understand what each document actually is (e.g. invoice, resume, receipt, report) and categorize accordingly.\n"
+            "2. If creating a new folder, include the CREATE_FOLDER operation before MOVE_FILE operations targeting it.\n"
+            "3. If user asks to share a file, include SHARE_FILE.\n"
+            "4. Return ONLY raw JSON without markdown code fences."
         )
 
         user_content = {
             "user_request": user_prompt,
             "current_folder_id": current_folder_id,
-            "available_files": [
-                {
-                    "id": f["id"],
-                    "name": f["name"],
-                    "mimeType": f["mimeType"],
-                    "isFolder": f["isFolder"],
-                    "modifiedTime": f.get("modifiedTime")
-                }
-                for f in current_files
-            ]
+            "available_files": files_with_context
         }
 
         # Google API requires gemini-3.8-flash

@@ -19,15 +19,22 @@ class DriveItem(BaseModel):
 
 class ProposedOperation(BaseModel):
     id: str
-    type: str  # "CREATE_FOLDER", "MOVE_FILE", "RENAME_FILE"
+    type: str  # "CREATE_FOLDER", "MOVE_FILE", "RENAME_FILE", "SHARE_FILE", "CREATE_DOC", "EXPORT_PDF"
     file_id: Optional[str] = None
     file_name: Optional[str] = None
     folder_name: Optional[str] = None
+    doc_title: Optional[str] = None
     parent_id: Optional[str] = "root"
     source_folder_id: Optional[str] = None
     target_folder_id: Optional[str] = None
     target_folder_name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = "reader"
     reason: Optional[str] = None
+
+class ScheduleCleanRequest(BaseModel):
+    cron_time: str = "every_friday" # "every_day", "every_friday", "every_hour"
+    target_folder_name: str = "Weekly Archive"
 
 class PlanResponse(BaseModel):
     explanation: str
