@@ -32,12 +32,24 @@ class DriveAgent:
             except Exception:
                 pass
 
-        # 2. Extract content snippets for documents to enable deep content-aware sorting
+        # 2. Extract content snippets intelligently:
+        # Prioritize files explicitly named in prompt or relevant to prompt, with a strict max token budget
         files_with_context = []
-        for f in current_files[:40]:
-            snippet = ""
-            if not f["isFolder"]:
-                snippet = self.drive.get_file_content_snippet(f["id"], f["mimeType"], max_chars=400)
+        user_prompt_lower = user_prompt.lower()
+        
+        # Sort files so any files mentioned in the user's prompt come first
+        sorted_files = sorted(
+            current_files,
+            key=lambda f: 0 if f["name"].lower() in user_prompt_lower or any(part in f["name"].lower() for part in user_prompt_lower.split() if len(part) > 3) else 1
+        )
+
+        # Inspect snippets for up to 15 relevant files to conserve API limits & quota
+        for idx, f in enumerate(sorted_files[:30]):
+            snippet = None
+            if not f["isFolder"] and idx < 15:
+                # Use compact 350 max_chars snippet
+                snippet = self.drive.get_file_content_snippet(f["id"], f["mimeType"], max_chars=350)
+
             files_with_context.append({
                 "id": f["id"],
                 "name": f["name"],
@@ -47,20 +59,30 @@ class DriveAgent:
                 "content_preview": snippet if snippet else None
             })
 
-        # 3. System Prompt instructing Gemini with full suite of actions
+        # 3. System Prompt instructing Gemini with full suite of actions & concise reporting
         system_instruction = (
-            "You are Smart Drive Assistant, an autonomous Google Drive file manager with deep content inspection.\n"
-            "You can analyze file contents (PDFs, Docs, Sheets, images), answer questions about files, identify duplicates, and execute organization plans.\n"
-            "Supported operation types:\n"
-            "- 'CREATE_FOLDER': { folder_name, parent_id, reason }\n"
-            "- 'MOVE_FILE': { file_id, file_name, source_folder_id, target_folder_name, reason }\n"
-            "- 'RENAME_FILE': { file_id, file_name, new_name, reason }\n"
-            "- 'SHARE_FILE': { file_id, file_name, email, role: 'reader'|'writer', reason }\n"
-            "- 'CREATE_DOC': { doc_title, parent_id, reason }\n"
-            "- 'EXPORT_PDF': { file_id, file_name, reason }\n\n"
+            "You are Smart Drive Assistant, an autonomous AI Google Drive manager with deep content inspection.\n"
+            "You analyze file contents (PDFs, Docs, Sheets, images like JPEG/PNG, videos like MP4), answer questions, and execute organization plans.\n\n"
+            "Capabilities & Rules:\n"
+            "1. DESCRIPTIVE FOLDER NAMING & LOCATIONS:\n"
+            "   - When creating or moving to folders, choose professional, self-explanatory names (e.g., 'Campus Placements/2026 Batch', 'Marketing Media/Images', 'Video Footage/Recordings', 'Invoices & Receipts').\n"
+            "   - Group files cleanly by domain, date, or content context.\n"
+            "2. MULTIMEDIA & DOCUMENT ANALYSIS:\n"
+            "   - For image & video files, inspect their metadata (dimensions, camera, geolocation, duration) to understand what they are.\n"
+            "   - For spreadsheets and documents, review their content snippet to answer user inquiries.\n"
+            "3. CONCISE EXECUTIVE SUMMARIES (API-FRIENDLY):\n"
+            "   - Keep your 'explanation' crisp, minimal, and informative (under 250 words).\n"
+            "   - When asked to read/extract data from a file, provide a compact summary table or bullet points instead of flooding raw dumps.\n"
+            "4. Supported operation types:\n"
+            "   - 'CREATE_FOLDER': { folder_name, parent_id, reason }\n"
+            "   - 'MOVE_FILE': { file_id, file_name, source_folder_id, target_folder_name, reason }\n"
+            "   - 'RENAME_FILE': { file_id, file_name, new_name, reason }\n"
+            "   - 'SHARE_FILE': { file_id, file_name, email, role: 'reader'|'writer', reason }\n"
+            "   - 'CREATE_DOC': { doc_title, parent_id, reason }\n"
+            "   - 'EXPORT_PDF': { file_id, file_name, reason }\n\n"
             "Format your response as valid JSON matching this schema:\n"
             "{\n"
-            '  "explanation": "Clear summary of the organization plan or conversational answer to user question",\n'
+            '  "explanation": "Concise summary report or direct conversational answer",\n'
             '  "operations": [\n'
             '    {\n'
             '      "id": "unique-uuid-str",\n'
@@ -69,11 +91,8 @@ class DriveAgent:
             '    }\n'
             '  ]\n'
             "}\n"
-            "Rules:\n"
-            "1. Inspect 'content_preview' and 'available_files' to understand what each document actually is.\n"
-            "2. If user asks a question (e.g. 'Is there any image in my whole drive?'), check available_files and answer clearly in 'explanation'. If no move/create actions are needed, return operations as empty [].\n"
-            "3. If creating a new folder, include CREATE_FOLDER before MOVE_FILE operations targeting it.\n"
-            "4. Return ONLY raw JSON without markdown code fences."
+            "If no move/create actions are needed (e.g. user just asks a question or wants a summary), return 'operations': [].\n"
+            "Return ONLY raw JSON without markdown code fences."
         )
 
         user_content = {

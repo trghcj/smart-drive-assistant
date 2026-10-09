@@ -168,34 +168,83 @@ class DriveService:
         ).execute()
         return uploaded
 
-    def get_file_content_snippet(self, file_id: str, mime_type: str, max_chars: int = 1500) -> str:
-        """Extract text snippet from Docs, Sheets, or PDFs for content-aware sorting."""
+    def get_file_content_snippet(self, file_id: str, mime_type: str, max_chars: int = 500) -> str:
+        """Extract lightweight text snippet, image metadata, or video info for fast content-aware analysis."""
         try:
-            # 1. Google Doc / Sheet / Presentation -> export as plain text
-            if "google-apps.document" in mime_type or "google-apps.kix" in mime_type:
+            # 1. Images (JPEG, PNG, WEBP, GIF, SVG)
+            if "image/" in mime_type:
+                try:
+                    meta = self.service.files().get(
+                        fileId=file_id,
+                        fields="imageMediaMetadata(width, height, time, cameraMake, cameraModel, location)"
+                    ).execute()
+                    imm = meta.get("imageMediaMetadata") or {}
+                    parts = []
+                    if imm.get("width") and imm.get("height"):
+                        parts.append(f"dimensions: {imm['width']}x{imm['height']}")
+                    if imm.get("cameraMake") or imm.get("cameraModel"):
+                        parts.append(f"camera: {imm.get('cameraMake', '')} {imm.get('cameraModel', '')}".strip())
+                    if imm.get("time"):
+                        parts.append(f"captured: {imm['time']}")
+                    if imm.get("location"):
+                        loc = imm["location"]
+                        parts.append(f"geo-coordinates: lat={loc.get('latitude')}, lon={loc.get('longitude')}")
+                    return f"[Image file | {', '.join(parts) if parts else 'standard image'}]"
+                except Exception:
+                    return "[Image file]"
+
+            # 2. Videos (MP4, MOV, MKV, AVI, WEBM)
+            elif "video/" in mime_type:
+                try:
+                    meta = self.service.files().get(
+                        fileId=file_id,
+                        fields="videoMediaMetadata(width, height, durationMillis)"
+                    ).execute()
+                    vmm = meta.get("videoMediaMetadata") or {}
+                    parts = []
+                    if vmm.get("width") and vmm.get("height"):
+                        parts.append(f"resolution: {vmm['width']}x{vmm['height']}")
+                    if vmm.get("durationMillis"):
+                        dur_sec = round(int(vmm["durationMillis"]) / 1000)
+                        parts.append(f"duration: {dur_sec}s")
+                    return f"[Video file | {', '.join(parts) if parts else 'video recording'}]"
+                except Exception:
+                    return "[Video file]"
+
+            # 3. Google Doc / Presentation -> export as plain text
+            elif "google-apps.document" in mime_type or "google-apps.kix" in mime_type:
                 res = self.service.files().export(fileId=file_id, mimeType="text/plain").execute()
-                return res.decode("utf-8", errors="ignore")[:max_chars] if isinstance(res, bytes) else str(res)[:max_chars]
+                text = res.decode("utf-8", errors="ignore") if isinstance(res, bytes) else str(res)
+                return text.strip()[:max_chars]
+
+            # 4. Google Sheet -> export as CSV (compact first few rows)
             elif "google-apps.spreadsheet" in mime_type:
                 res = self.service.files().export(fileId=file_id, mimeType="text/csv").execute()
-                return res.decode("utf-8", errors="ignore")[:max_chars] if isinstance(res, bytes) else str(res)[:max_chars]
-            # 2. Binary PDF file -> download and extract with pypdf
+                text = res.decode("utf-8", errors="ignore") if isinstance(res, bytes) else str(res)
+                lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
+                return "\n".join(lines)[:max_chars]
+
+            # 5. Binary PDF file -> extract first page
             elif "pdf" in mime_type:
                 import io
                 from pypdf import PdfReader
                 content = self.service.files().get_media(fileId=file_id).execute()
                 reader = PdfReader(io.BytesIO(content))
                 text = ""
-                for page in reader.pages[:3]:
-                    text += page.extract_text() or ""
+                for page in reader.pages[:2]:
+                    text += (page.extract_text() or "") + "\n"
                     if len(text) >= max_chars:
                         break
-                return text[:max_chars]
-            # 3. Plain text / Markdown / CSV
+                return text.strip()[:max_chars]
+
+            # 6. Plain text / Markdown / CSV / JSON
             elif "text/" in mime_type or "csv" in mime_type or "json" in mime_type:
                 content = self.service.files().get_media(fileId=file_id).execute()
-                return content.decode("utf-8", errors="ignore")[:max_chars]
+                text = content.decode("utf-8", errors="ignore")
+                return text.strip()[:max_chars]
+
         except Exception as e:
-            return f"[Snippet extraction unavailable: {str(e)}]"
+            return f"[Snippet unavailable: {str(e)}]"
         return ""
 
     def find_duplicates(self, folder_id: str = "root") -> List[Dict[str, Any]]:
