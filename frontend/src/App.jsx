@@ -35,7 +35,8 @@ import {
   Zap,
   FolderSync,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Share2
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -182,6 +183,11 @@ export default function App() {
   const [newFolderModal, setNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [shareModal, setShareModal] = useState(false);
+  const [sharingFile, setSharingFile] = useState(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareRole, setShareRole] = useState('reader');
+  const [sharingLoading, setSharingLoading] = useState(false);
 
   const chatEndRef = useRef(null);
   const promptInputRef = useRef(null);
@@ -350,6 +356,33 @@ export default function App() {
       setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, starred: newStarred } : f)));
     } catch (err) {
       console.error('Error toggling star:', err);
+    }
+  };
+
+  const handleOpenShareModal = (file, e) => {
+    e?.stopPropagation();
+    setSharingFile(file);
+    setShareEmail('');
+    setShareRole('reader');
+    setShareModal(true);
+  };
+
+  const handleShareItem = async (e) => {
+    e?.preventDefault();
+    if (!sharingFile || !shareEmail.trim() || sharingLoading) return;
+    setSharingLoading(true);
+    try {
+      await axios.post(
+        `${API_BASE}/drive/share?file_id=${sharingFile.id}&email=${encodeURIComponent(shareEmail.trim())}&role=${shareRole}&session_id=${sessionId}`
+      );
+      alert(`Successfully shared "${sharingFile.name}" with ${shareEmail} as ${shareRole}.`);
+      setShareModal(false);
+      setSharingFile(null);
+      setShareEmail('');
+    } catch (err) {
+      alert(`Failed to share: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setSharingLoading(false);
     }
   };
 
@@ -1178,6 +1211,21 @@ export default function App() {
                     <span>Star / Unstar</span>
                   </button>
 
+                  {/* Share button */}
+                  {selectedFileIds.size === 1 && (
+                    <button
+                      onClick={() => {
+                        const file = getSelectedFileList()[0];
+                        if (file) handleOpenShareModal(file);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                      title="Share selected item"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-[#4d602c]" />
+                      <span>Share</span>
+                    </button>
+                  )}
+
                   {/* Bulk Trash */}
                   <button
                     onClick={handleBulkTrash}
@@ -1275,6 +1323,13 @@ export default function App() {
                               <Star className={`w-3.5 h-3.5 ${item.starred ? 'fill-amber-500' : ''}`} />
                             </button>
                             <button
+                              onClick={(e) => handleOpenShareModal(item, e)}
+                              className="p-1 rounded hover:bg-[#f2f4ef] text-[#8a9282] hover:text-[#4d602c] opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                              title="Share"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
                               onClick={(e) => handleToggleTrash(item, e)}
                               className="p-1 rounded hover:bg-rose-50 text-[#8a9282] hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
                               title={item.trashed ? 'Restore' : 'Move to Trash'}
@@ -1369,6 +1424,13 @@ export default function App() {
                                 title={item.starred ? 'Unstar' : 'Star'}
                               >
                                 <Star className={`w-3.5 h-3.5 ${item.starred ? 'fill-amber-500' : ''}`} />
+                              </button>
+                              <button
+                                onClick={(e) => handleOpenShareModal(item, e)}
+                                className="p-1 rounded hover:bg-[#f2f4ef] text-[#8a9282] hover:text-[#4d602c] opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                title="Share"
+                              >
+                                <Share2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={(e) => handleToggleTrash(item, e)}
@@ -1842,6 +1904,76 @@ export default function App() {
                   className="px-4 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl text-xs font-medium transition cursor-pointer disabled:opacity-50"
                 >
                   {creatingFolder ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {shareModal && sharingFile && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-[#e5e8e1] rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#e5e8e1]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#edf2e4] text-[#4d602c] flex items-center justify-center">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-[#1e2419]">Share "{sharingFile.name}"</h3>
+                  <p className="text-[11px] text-[#8a9282]">Add people with Google Drive access</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShareModal(false)}
+                className="p-1 rounded-lg text-[#8a9282] hover:bg-[#f7f8f6] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleShareItem} className="py-4 space-y-4 text-xs">
+              <div>
+                <label className="block text-[#6b7362] mb-1.5 font-medium">Recipient Email Address</label>
+                <input
+                  type="email"
+                  required
+                  autoFocus
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  placeholder="collaborator@example.com"
+                  className="w-full bg-[#fcfdfa] border border-[#e5e8e1] rounded-xl p-2.5 text-[#1e2419] outline-none focus:border-[#4d602c]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#6b7362] mb-1.5 font-medium">Access Role</label>
+                <select
+                  value={shareRole}
+                  onChange={(e) => setShareRole(e.target.value)}
+                  className="w-full bg-[#fcfdfa] border border-[#e5e8e1] rounded-xl p-2.5 text-[#1e2419] outline-none focus:border-[#4d602c]"
+                >
+                  <option value="reader">Viewer (Can view and download)</option>
+                  <option value="commenter">Commenter (Can add comments)</option>
+                  <option value="writer">Editor (Can edit and organize)</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShareModal(false)}
+                  className="px-4 py-2 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] rounded-xl text-[#6b7362] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!shareEmail.trim() || sharingLoading}
+                  className="px-4 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl font-medium transition cursor-pointer disabled:opacity-50"
+                >
+                  {sharingLoading ? 'Sharing...' : 'Send Access'}
                 </button>
               </div>
             </form>

@@ -226,6 +226,13 @@ def trash_file(file_id: str = Query(...), trashed: bool = Query(True), session_i
     res = drive.toggle_trash_file(file_id=file_id, trashed=trashed)
     return {"success": True, "file": res}
 
+@app.post("/api/drive/share")
+def share_drive_item(file_id: str = Query(...), email: str = Query(...), role: str = Query("reader"), session_id: str = Query(...)):
+    """Share file or folder with an email address."""
+    drive = get_drive_service(session_id)
+    res = drive.share_file(file_id=file_id, email=email, role=role)
+    return {"success": True, "permission": res}
+
 @app.post("/api/drive/create-folder")
 def create_new_folder(folder_name: str = Query(...), parent_id: str = Query("root"), session_id: str = Query(...)):
     """Quickly create a folder."""
