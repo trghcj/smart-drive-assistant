@@ -82,8 +82,9 @@ class DriveAgent:
             "   - 'MOVE_FILE': { file_id, file_name, source_folder_id, target_folder_name, reason }\n"
             "   - 'RENAME_FILE': { file_id, file_name, new_name, reason }\n"
             "   - 'SHARE_FILE': { file_id, file_name, email, role: 'reader'|'writer', reason }\n"
-            "   - 'CREATE_DOC': { doc_title, parent_id, reason }\n"
+            "   - 'CREATE_DOC': { doc_title, target_folder_name, doc_content: 'Full structured analysis report text to write inside the document', reason }\n"
             "   - 'EXPORT_PDF': { file_id, file_name, reason }\n\n"
+            "CRITICAL: When generating a summary report or analysis document (CREATE_DOC), ALWAYS populate 'doc_content' with the comprehensive summary, metrics, and findings so the created Google Doc is populated and not blank!\n\n"
             "Format your response as valid JSON matching this schema:\n"
             "{\n"
             '  "explanation": "Clean and concise explanation or summary for the user",\n'

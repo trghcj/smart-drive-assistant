@@ -345,7 +345,15 @@ def execute_plan(req: ExecutePlanRequest, session_id: str = Query(...)):
                 })
 
         elif op.type == "CREATE_DOC":
-            doc = drive.create_google_doc(title=op.doc_title or op.file_name or "Untitled Doc", parent_folder_id=op.parent_id or "root")
+            parent = op.parent_id or "root"
+            if op.target_folder_name and op.target_folder_name in created_folders:
+                parent = created_folders[op.target_folder_name]
+
+            doc = drive.create_google_doc(
+                title=op.doc_title or op.file_name or "Untitled Doc",
+                parent_folder_id=parent,
+                content=op.doc_content or op.reason or ""
+            )
             executed.append({
                 "type": "CREATE_DOC",
                 "doc_title": op.doc_title,

@@ -301,17 +301,34 @@ class DriveService:
             sendNotificationEmail=True
         ).execute()
 
-    def create_google_doc(self, title: str, parent_folder_id: str = "root") -> Dict[str, Any]:
-        """Create a new Google Doc."""
+    def create_google_doc(self, title: str, parent_folder_id: str = "root", content: str = "") -> Dict[str, Any]:
+        """Create a new Google Doc with optional initial text content."""
+        from googleapiclient.http import MediaIoBaseUpload
+        import io
+
         file_metadata = {
             "name": title,
             "mimeType": "application/vnd.google-apps.document",
             "parents": [parent_folder_id]
         }
-        return self.service.files().create(
-            body=file_metadata,
-            fields="id, name, mimeType, webViewLink"
-        ).execute()
+
+        if content:
+            # Upload plain text content while converting to Google Doc
+            media = MediaIoBaseUpload(
+                io.BytesIO(content.encode("utf-8")),
+                mimetype="text/plain",
+                resumable=True
+            )
+            return self.service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields="id, name, mimeType, webViewLink"
+            ).execute()
+        else:
+            return self.service.files().create(
+                body=file_metadata,
+                fields="id, name, mimeType, webViewLink"
+            ).execute()
 
     def export_doc_as_pdf(self, file_id: str, filename: str, target_folder_id: str = "root") -> Dict[str, Any]:
         """Export Google Doc or Sheet as PDF and save directly to Drive."""

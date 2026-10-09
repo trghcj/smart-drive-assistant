@@ -24,6 +24,7 @@ class ProposedOperation(BaseModel):
     file_name: Optional[str] = None
     folder_name: Optional[str] = None
     doc_title: Optional[str] = None
+    doc_content: Optional[str] = None
     parent_id: Optional[str] = "root"
     source_folder_id: Optional[str] = None
     target_folder_id: Optional[str] = None
