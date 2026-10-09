@@ -18,7 +18,8 @@ from .schemas import (
     ChatRequest,
     PlanResponse,
     ExecutePlanRequest,
-    ExecutionResult
+    ExecutionResult,
+    ScheduleCleanRequest
 )
 from .drive_service import DriveService
 from .agent import DriveAgent
@@ -79,9 +80,25 @@ def get_client_config():
     }
 
 def get_drive_service(session_id: str) -> DriveService:
-    if not session_id or session_id not in USER_SESSIONS:
+    global USER_SESSIONS
+    if not session_id:
         raise HTTPException(status_code=401, detail="Unauthorized. Please log in with Google.")
-    return DriveService(USER_SESSIONS[session_id])
+
+    # In case another worker or request wrote to disk, reload if not in memory
+    if session_id not in USER_SESSIONS:
+        USER_SESSIONS = load_data(SESSIONS_FILE)
+
+    if session_id not in USER_SESSIONS:
+        raise HTTPException(status_code=401, detail="Unauthorized. Please log in with Google.")
+
+    def on_token_refresh(new_access_token: str, new_refresh_token: Optional[str] = None):
+        if session_id in USER_SESSIONS:
+            USER_SESSIONS[session_id]["access_token"] = new_access_token
+            if new_refresh_token:
+                USER_SESSIONS[session_id]["refresh_token"] = new_refresh_token
+            save_data(SESSIONS_FILE, USER_SESSIONS)
+
+    return DriveService(USER_SESSIONS[session_id], on_token_refresh=on_token_refresh)
 
 # ----------------- AUTH ROUTES -----------------
 
@@ -120,10 +137,23 @@ def google_callback(code: str, state: Optional[str] = None):
     flow.fetch_token(code=code)
     creds = flow.credentials
 
+    # Reload SESSIONS_FILE from disk in case of multi-worker/restart
+    current_stored = load_data(SESSIONS_FILE)
+    USER_SESSIONS.update(current_stored)
+
+    # Check if we already have an existing session for this client with a refresh_token
+    refresh_token = creds.refresh_token
+    if not refresh_token:
+        # Fall back to any previously saved refresh_token if Google didn't reissue one
+        for prev in USER_SESSIONS.values():
+            if prev.get("refresh_token"):
+                refresh_token = prev.get("refresh_token")
+                break
+
     session_id = str(uuid.uuid4())
     USER_SESSIONS[session_id] = {
         "access_token": creds.token,
-        "refresh_token": creds.refresh_token,
+        "refresh_token": refresh_token,
         "client_id": creds.client_id,
         "client_secret": creds.client_secret,
         "scopes": creds.scopes

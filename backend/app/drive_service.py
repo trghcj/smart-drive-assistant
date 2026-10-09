@@ -1,10 +1,11 @@
 import json
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 class DriveService:
-    def __init__(self, credentials_info: dict):
+    def __init__(self, credentials_info: dict, on_token_refresh: Optional[Callable[[str, Optional[str]], None]] = None):
         self.creds = Credentials(
             token=credentials_info.get("access_token"),
             refresh_token=credentials_info.get("refresh_token"),
@@ -13,6 +14,16 @@ class DriveService:
             client_secret=credentials_info.get("client_secret"),
             scopes=credentials_info.get("scopes")
         )
+        # Check and auto-refresh credentials if expired or missing access token
+        try:
+            if not self.creds.valid:
+                request = Request()
+                self.creds.refresh(request)
+                if on_token_refresh and self.creds.token:
+                    on_token_refresh(self.creds.token, self.creds.refresh_token)
+        except Exception as e:
+            print(f"Warning: Token refresh attempt: {e}")
+
         self.service = build("drive", "v3", credentials=self.creds)
 
     def list_files_in_folder(self, folder_id: str = "root", view: str = "my-drive", page_size: int = 60) -> List[Dict[str, Any]]:
