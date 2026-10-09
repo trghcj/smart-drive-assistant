@@ -475,6 +475,76 @@ export default function App() {
     setSelectedFileIds(next);
   };
 
+  const clearSelection = () => {
+    setSelectedFileIds(new Set());
+  };
+
+  const getSelectedFileList = () => {
+    return visibleFiles.filter((f) => selectedFileIds.has(f.id));
+  };
+
+  const handleBulkTrash = async () => {
+    const count = selectedFileIds.size;
+    if (count === 0) return;
+    if (!window.confirm(`Move ${count} selected item(s) to Trash?`)) return;
+
+    const list = getSelectedFileList();
+    try {
+      await Promise.all(
+        list.map((file) =>
+          axios.post(`${API_BASE}/drive/trash?file_id=${file.id}&trashed=true&session_id=${sessionId}`)
+        )
+      );
+      clearSelection();
+      fetchFiles(currentFolder, selectedNav);
+    } catch (err) {
+      console.error('Error trashing selected files:', err);
+      alert(`Failed to trash some items: ${err.message}`);
+    }
+  };
+
+  const handleBulkStar = async () => {
+    const count = selectedFileIds.size;
+    if (count === 0) return;
+
+    const list = getSelectedFileList();
+    // If all are starred, unstar them; otherwise star them
+    const allStarred = list.every((f) => f.starred);
+    const newStarred = !allStarred;
+
+    try {
+      await Promise.all(
+        list.map((file) =>
+          axios.post(`${API_BASE}/drive/star?file_id=${file.id}&starred=${newStarred}&session_id=${sessionId}`)
+        )
+      );
+      clearSelection();
+      fetchFiles(currentFolder, selectedNav);
+    } catch (err) {
+      console.error('Error toggling stars on selected files:', err);
+      alert(`Failed to update star status: ${err.message}`);
+    }
+  };
+
+  const handleBulkAskAssistant = (action = 'organize') => {
+    const list = getSelectedFileList();
+    if (list.length === 0) return;
+    const names = list.map((f) => `"${f.name}"`).join(', ');
+
+    let query = '';
+    if (action === 'organize') {
+      query = `Please organize these ${list.length} selected files: ${names}`;
+    } else if (action === 'summarize') {
+      query = `Please summarize the purpose and details of these ${list.length} selected files: ${names}`;
+    } else if (action === 'archive') {
+      query = `Create an Archive folder and move these selected files into it: ${names}`;
+    } else {
+      query = `Here are the selected files: ${names}. What can I do with them?`;
+    }
+
+    openAssistantWith(query);
+  };
+
   const formatSize = (bytes) => {
     if (!bytes) return '—';
     const n = Number(bytes);
@@ -975,6 +1045,59 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Active Selection Bulk Action Bar */}
+            {selectedFileIds.size > 0 && (
+              <div className="mx-6 mt-3 px-4 py-2 bg-[#edf2e4] border border-[#c8d6b9] rounded-2xl flex items-center justify-between gap-4 text-xs shadow-sm animate-in fade-in flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-[#2f3d1b] flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-[#4d602c] text-white text-[11px] font-bold flex items-center justify-center">
+                      {selectedFileIds.size}
+                    </span>
+                    <span>item{selectedFileIds.size > 1 ? 's' : ''} selected</span>
+                  </span>
+
+                  <button
+                    onClick={clearSelection}
+                    className="text-[#6b7362] hover:text-[#1e2419] underline font-medium cursor-pointer ml-1"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Ask Assistant for Selected Files */}
+                  <button
+                    onClick={() => handleBulkAskAssistant('organize')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl font-medium transition cursor-pointer shadow-xs"
+                    title="Ask AI Assistant to organize or process these files"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Ask Assistant</span>
+                  </button>
+
+                  {/* Bulk Star / Unstar */}
+                  <button
+                    onClick={handleBulkStar}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    title="Star / Unstar selected items"
+                  >
+                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                    <span>Star / Unstar</span>
+                  </button>
+
+                  {/* Bulk Trash */}
+                  <button
+                    onClick={handleBulkTrash}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl font-medium transition cursor-pointer"
+                    title="Move selected items to Trash"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Move to Trash</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Undo Notification Banner */}
             {undoMessage && (
