@@ -1241,20 +1241,32 @@ export default function App() {
 
             {/* Undo Notification Banner */}
             {undoMessage && (
-              <div className="mx-6 mt-3 px-4 py-2.5 bg-[#f2f6ea] border border-[#d2dec0] rounded-xl flex items-center justify-between text-xs text-[#3d4d23] flex-shrink-0">
+              <div className="mx-6 mt-3 px-4 py-2.5 bg-[#f2f6ea] border border-[#d2dec0] rounded-xl flex items-center justify-between text-xs text-[#3d4d23] flex-shrink-0 animate-in fade-in">
                 <span className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-[#4d602c]" />
                   <span>{undoMessage}</span>
                 </span>
-                {undoToken && (
+                <div className="flex items-center gap-2">
+                  {undoToken && (
+                    <button
+                      onClick={handleUndo}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-white border border-[#d2dec0] hover:bg-[#e4ebd8] rounded-lg font-medium transition cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Undo Action
+                    </button>
+                  )}
                   <button
-                    onClick={handleUndo}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-white border border-[#d2dec0] hover:bg-[#e4ebd8] rounded-lg font-medium transition cursor-pointer"
+                    onClick={() => {
+                      setUndoMessage(null);
+                      setUndoToken(null);
+                    }}
+                    className="p-1 text-[#6b7362] hover:text-[#1e2419] hover:bg-[#e4ebd8] rounded-lg transition cursor-pointer"
+                    title="Dismiss notification"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Undo Action
+                    <X className="w-4 h-4" />
                   </button>
-                )}
+                </div>
               </div>
             )}
 
