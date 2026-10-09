@@ -8,9 +8,13 @@ Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn'
 
 ## ✨ Features Implemented Today
 
-### 1. 🤖 Autonomous Gemini 3.8 Flash Agent
+### 1. 🤖 Autonomous Gemini 3.8 Flash Agent & Media Inspection
 - **Natural Language Execution**: Direct actions from plain English prompts (*"Find all 2026 invoices and put them into a new Taxes folder"*).
-- **Deep Content-Aware Inspection**: Reads text snippets inside PDFs (via `pypdf`), Google Docs, and Sheets so files are classified by their actual content rather than just names.
+- **Deep Content & Multimedia Inspection**:
+  - Reads text snippets inside PDFs (via `pypdf`), Google Docs, and Sheets.
+  - **Images & Video Analysis**: Analyzes media metadata for images (`.jpg`, `.png`, `.webp` - dimensions, camera model, geolocations, timestamps) and videos (`.mp4`, `.mov`, `.mkv` - resolution, duration) without consuming excessive token limits.
+  - **API Token-Budget Optimization**: Prioritizes selected/queried files, restricts character payloads to 350 characters, and produces concise executive summaries under 250 words.
+- **Smart Folder Categorization & Naming**: Automatically selects professional, structured destination paths (e.g. `Campus Placements/2026 Batch`, `Media Assets/Images`, `Financials/Invoices & Receipts`).
 - **Multimodal Voice Input**: Native browser Web Speech API microphone integration in the chat input for hands-free voice commands.
 
 ### 2. 🛡️ Safety-First Architecture & Reversibility
@@ -18,33 +22,42 @@ Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn'
 - **1-Click Instant Undo**: Reverts any batch file moves back to their original parent locations with a single click.
 - **Zero Drive Takeover / Privacy**: Files remain 100% inside user Google Drive. No documents or user files are ever stored on our servers.
 
-### 3. 📂 Live Google Drive Explorer & Ingestion
+### 3. ☑️ Interactive Multi-File Selection & Bulk Actions
+- **Active Bulk Action Toolbar**: Selecting one or multiple files slides in a specialized bulk action bar:
+  - **Selection Counter & Clear**: Real-time counter badge and one-click clear button.
+  - **✨ Ask Assistant**: Feeds the exact list of selected files into the AI chat to summarize, organize, or categorize.
+  - **⭐ Star / Unstar**: Bulk toggles star status on Google Drive in parallel.
+  - **🗑️ Bulk Trash**: Safe confirmation modal to batch-trash selected items.
+
+### 4. 📂 Live Google Drive Explorer & Ingestion
 - **Real-Time Drive Tree Navigation**: Interactive explorer with breadcrumb navigation, type badges, file sizes, and direct links to Drive.
+- **Mouse Draggable Resizing**: Drag the border between the File Manager and Assistant to smoothly resize the panels to any desired width.
 - **Local-to-Drive File Uploader**:
   - Top toolbar **Upload Files** button for multi-file desktop uploads.
   - Full drag-and-drop dropzone directly over the file list container.
 
-### 4. 🔍 Duplicates Detection (MD5 Checksum)
+### 5. 🔍 Duplicates Detection (MD5 Checksum)
 - Dedicated **Find Duplicates** modal tool that compares exact MD5 hashes and file sizes to identify redundant copies in any folder.
 
-### 5. ⏰ Scheduled Autonomous Maintenance
+### 6. ⏰ Scheduled Autonomous Maintenance
 - **Auto-Clean Schedule** powered by `APScheduler`:
   - Configurable frequencies: Every Friday at 5:00 PM, Daily at Midnight, or Hourly Maintenance Sweeps.
   - Automatically sweeps unorganized loose files into a target archive folder.
 
-### 6. 📤 Sharing & Document Tools
+### 7. 📤 Sharing & Document Tools
 - **File Sharing**: Grant Editor or Viewer permissions directly from the AI chat (*"Share offer letter with friend@gmail.com as reader"*).
 - **Document Creation & PDF Export**: Create blank Google Docs or export spreadsheets/docs to PDF format.
 
-### 7. 🗑️ Delete Account & Privacy Compliance
+### 8. 🗑️ Delete Account & Privacy Compliance
 - **1-Click Account Purge**:
   - Revokes OAuth tokens directly with Google's revocation endpoint (`https://oauth2.googleapis.com/revoke`).
   - Purges user profile, session credentials, and undo transactions from persistent storage.
   - Clears browser `localStorage` and completely logs out.
 
-### 8. 🎨 Design System: White & Olive Green Theme
-- Redesigned with custom CSS theme variables (`--color-moss-50` through `--color-moss-900`, `--color-ink`).
-- Clean Inter typography, responsive card layouts, frosted glass headers, and subtle ambient gradients.
+### 9. 🎨 Design System: White & Olive Green Theme
+- **Olive & Moss Palette**: Clean neutral background `#f7f8f6`, olive accents `#4d602c`, and light green scrollbar thumb styling (`#c8d6b9` with hover `#9bb185`).
+- **Collapsible Sidebar**: Smoothly collapses into a compact `w-16` icon bar with centered expand/collapse toggle and border alignment.
+- **Independent Scroll Areas**: Fixed header, independently scrolling file lists, and dedicated assistant panel.
 
 ---
 
