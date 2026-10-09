@@ -40,6 +40,98 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
 
+// Helper to render assistant messages with clean styling without raw markdown asterisks, hashes, or slashes
+function FormattedMessage({ text }) {
+  if (!text) return null;
+
+  // Split lines
+  const lines = text.split('\n');
+
+  // Helper to parse inline bolding (**text**) into <strong>
+  const parseInline = (lineText) => {
+    // Split by **
+    const parts = lineText.split(/\*\*(.*?)\*\*/g);
+    return parts.map((part, idx) => {
+      if (idx % 2 === 1) {
+        // Bold part
+        return <strong key={idx} className="font-semibold text-[#1e2419]">{part}</strong>;
+      }
+      return part;
+    });
+  };
+
+  return (
+    <div className="space-y-1.5 text-xs text-[#2c3327] leading-relaxed">
+      {lines.map((rawLine, idx) => {
+        const line = rawLine.trim();
+
+        // Empty line
+        if (!line) {
+          return <div key={idx} className="h-1.5" />;
+        }
+
+        // Markdown Heading (### Title or ## Title or # Title)
+        if (line.startsWith('#')) {
+          const headingText = line.replace(/^#+\s*/, '');
+          return (
+            <h4 key={idx} className="font-bold text-[#1e2419] text-[13px] pt-1.5 pb-0.5 tracking-tight border-b border-[#e5e8e1]/60">
+              {parseInline(headingText)}
+            </h4>
+          );
+        }
+
+        // Bullet point (- or * or •)
+        if (line.match(/^[-*•]\s+/)) {
+          const bulletContent = line.replace(/^[-*•]\s+/, '');
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-1 py-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4d602c] mt-1.5 flex-shrink-0" />
+              <div className="flex-1">{parseInline(bulletContent)}</div>
+            </div>
+          );
+        }
+
+        // Numbered list (1. 2. etc.)
+        const numMatch = line.match(/^(\d+)\.\s+(.*)/);
+        if (numMatch) {
+          const num = numMatch[1];
+          const content = numMatch[2];
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-1 py-0.5">
+              <span className="font-bold text-[#4d602c] text-[11px] w-4 flex-shrink-0 text-right">{num}.</span>
+              <div className="flex-1">{parseInline(content)}</div>
+            </div>
+          );
+        }
+
+        // Table delimiter line (|---|---|) -> skip or clean
+        if (line.startsWith('|') && line.includes('---')) {
+          return null;
+        }
+
+        // Table row (| a | b | c |)
+        if (line.startsWith('|') && line.endsWith('|')) {
+          const cells = line.split('|').slice(1, -1).map(c => c.trim());
+          return (
+            <div key={idx} className="grid grid-flow-col auto-cols-fr gap-2 py-1 px-2 bg-white/70 rounded border border-[#e5e8e1]/50 text-[11px]">
+              {cells.map((c, cIdx) => (
+                <span key={cIdx} className="truncate">{parseInline(c)}</span>
+              ))}
+            </div>
+          );
+        }
+
+        // Regular prose paragraph
+        return (
+          <p key={idx} className="py-0.5">
+            {parseInline(line)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App() {
   const [sessionId, setSessionId] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1397,13 +1489,17 @@ export default function App() {
                       chatLog.map((msg, i) => (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                           <div
-                            className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 leading-relaxed whitespace-pre-wrap ${
+                            className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 leading-relaxed ${
                               msg.role === 'user'
-                                ? 'bg-[#4d602c] text-white'
+                                ? 'bg-[#4d602c] text-white whitespace-pre-wrap'
                                 : 'bg-[#f7f8f6] border border-[#e5e8e1] text-[#1e2419]'
                             }`}
                           >
-                            {msg.text}
+                            {msg.role === 'user' ? (
+                              msg.text
+                            ) : (
+                              <FormattedMessage text={msg.text} />
+                            )}
                           </div>
                         </div>
                       ))

@@ -70,9 +70,13 @@ class DriveAgent:
             "2. MULTIMEDIA & DOCUMENT ANALYSIS:\n"
             "   - For image & video files, inspect their metadata (dimensions, camera, geolocation, duration) to understand what they are.\n"
             "   - For spreadsheets and documents, review their content snippet to answer user inquiries.\n"
-            "3. CONCISE EXECUTIVE SUMMARIES (API-FRIENDLY):\n"
-            "   - Keep your 'explanation' crisp, minimal, and informative (under 250 words).\n"
-            "   - When asked to read/extract data from a file, provide a compact summary table or bullet points instead of flooding raw dumps.\n"
+            "3. CLEAN, CONCISE FORMATTING (NO CLUTTER):\n"
+            "   - Write in clean, beautiful, natural prose. Do NOT use markdown heading hashes (like '###').\n"
+            "   - Do NOT overuse bold asterisks ('**'). Use bold sparingly only for file names or crucial numbers.\n"
+            "   - Do NOT use unnecessary slashes, escaped characters, or raw markdown artifacts.\n"
+            "   - Format lists with clean bullet dashes ('•' or '-') or simple numbered steps (1., 2.).\n"
+            "   - Keep your 'explanation' crisp, minimal, and informative (under 200 words).\n"
+            "   - When summarizing spreadsheet/document data, provide a clean compact bulleted list of key highlights rather than unformatted table dumps.\n"
             "4. Supported operation types:\n"
             "   - 'CREATE_FOLDER': { folder_name, parent_id, reason }\n"
             "   - 'MOVE_FILE': { file_id, file_name, source_folder_id, target_folder_name, reason }\n"
@@ -82,7 +86,7 @@ class DriveAgent:
             "   - 'EXPORT_PDF': { file_id, file_name, reason }\n\n"
             "Format your response as valid JSON matching this schema:\n"
             "{\n"
-            '  "explanation": "Concise summary report or direct conversational answer",\n'
+            '  "explanation": "Clean and concise explanation or summary for the user",\n'
             '  "operations": [\n'
             '    {\n'
             '      "id": "unique-uuid-str",\n'
