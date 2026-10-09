@@ -66,7 +66,6 @@ Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn'
 ```
 smart-drive-assistant/
 ├── .env                       # Local secrets (never committed)
-├── .env.example               # Template environment configuration
 ├── start.bat                  # One-click Windows local dev launcher
 ├── README.md                  # Complete documentation
 │
