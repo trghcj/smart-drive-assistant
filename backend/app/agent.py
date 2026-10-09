@@ -105,25 +105,41 @@ class DriveAgent:
             "available_files": files_with_context
         }
 
-        # Supported modern Gemini models
-        models_to_try = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]
+        # Broad pool of high-availability Gemini models (Flash, 2.5, 2.0, 1.5)
+        models_to_try = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-flash-latest"
+        ]
         response = None
         last_err = None
 
+        import time
+
         for model_name in models_to_try:
-            try:
-                response = self.client.models.generate_content(
-                    model=model_name,
-                    contents=f"System: {system_instruction}\n\nUser Input: {json.dumps(user_content, indent=2)}",
-                )
-                if response:
-                    break
-            except Exception as err:
-                last_err = err
-                continue
+            # Try each model up to 2 times with a quick backoff if temporarily 503 or 429
+            for attempt in range(2):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model_name,
+                        contents=f"System: {system_instruction}\n\nUser Input: {json.dumps(user_content, indent=2)}",
+                    )
+                    if response and response.text:
+                        break
+                except Exception as err:
+                    last_err = err
+                    err_str = str(err).lower()
+                    if "503" in err_str or "unavailable" in err_str or "429" in err_str or "high demand" in err_str:
+                        time.sleep(1.2 * (attempt + 1))
+                        continue
+                    else:
+                        break
+            if response and response.text:
+                break
 
         if not response:
-            raise last_err or Exception("Failed to call Gemini model")
+            raise last_err or Exception("All Gemini models are temporarily busy. Please retry in a few moments.")
 
         try:
             raw_text = response.text.strip()

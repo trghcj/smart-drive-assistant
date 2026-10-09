@@ -277,8 +277,13 @@ def chat_with_agent(req: ChatRequest, session_id: str = Query(...)):
         err_msg = str(e)
         if "404" in err_msg or "not found" in err_msg.lower():
             explanation = "I searched your Google Drive but did not find any matching files for that request. Let me know if you would like me to create a folder or help organize existing files."
+        elif "503" in err_msg or "unavailable" in err_msg.lower() or "high demand" in err_msg.lower():
+            explanation = "The AI service is experiencing a brief surge in traffic. Please ask your question again in a moment."
+        elif "429" in err_msg or "quota" in err_msg.lower():
+            explanation = "The request limit was temporarily reached. Please wait a few seconds and try again."
         else:
-            explanation = f"Notice: {err_msg.splitlines()[0]}"
+            clean_err = err_msg.splitlines()[0]
+            explanation = f"Notice: {clean_err}"
         return PlanResponse(
             explanation=explanation,
             operations=[]
