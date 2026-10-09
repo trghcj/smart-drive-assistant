@@ -551,35 +551,45 @@ export default function App() {
         {/* Brand & Sidebar Toggle (matches sidebar width exactly) */}
         <div
           className={`h-full flex items-center border-r border-[#e5e8e1] transition-all duration-200 flex-shrink-0 ${
-            sidebarCollapsed ? 'w-16 px-2 justify-center' : 'w-60 px-4 justify-between'
+            sidebarCollapsed ? 'w-16 justify-center' : 'w-60 px-4 justify-between'
           }`}
         >
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <button
-              onClick={() => handleSelectNav('my-drive')}
-              className="flex items-center gap-2.5 hover:opacity-90 transition cursor-pointer text-left flex-shrink-0"
-              title="Go to My Drive"
-            >
-              <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm flex-shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-              </div>
-              {!sidebarCollapsed && (
+          {!sidebarCollapsed ? (
+            <>
+              <button
+                onClick={() => handleSelectNav('my-drive')}
+                className="flex items-center gap-2.5 hover:opacity-90 transition cursor-pointer text-left flex-shrink-0"
+                title="Go to My Drive"
+              >
+                <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                </div>
                 <span className="font-semibold text-base tracking-tight text-[#1e2419] whitespace-nowrap">
                   Smart Drive
                 </span>
+              </button>
+              {sessionId && (
+                <button
+                  onClick={() => setSidebarCollapsed(true)}
+                  className="p-1.5 rounded-lg text-[#6b7362] hover:bg-[#f2f4ef] hover:text-[#1e2419] transition cursor-pointer flex-shrink-0"
+                  title="Collapse sidebar"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
               )}
-            </button>
-          </div>
-          {sessionId && (
-            <button
-              onClick={() => setSidebarCollapsed((v) => !v)}
-              className="p-1.5 rounded-lg text-[#6b7362] hover:bg-[#f2f4ef] hover:text-[#1e2419] transition cursor-pointer flex-shrink-0"
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-            </button>
+            </>
+          ) : (
+            sessionId && (
+              <button
+                onClick={() => setSidebarCollapsed(false)}
+                className="p-2 rounded-xl text-[#6b7362] hover:bg-[#f2f4ef] hover:text-[#1e2419] transition cursor-pointer"
+                title="Expand sidebar"
+              >
+                <PanelLeftOpen className="w-5 h-5" />
+              </button>
+            )
           )}
         </div>
 
