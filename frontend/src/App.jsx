@@ -547,31 +547,44 @@ export default function App() {
   return (
     <div className="h-screen w-screen overflow-hidden bg-[#f7f8f6] text-[#2c3327] font-sans flex flex-col antialiased">
       {/* ================= TOP NAVBAR ================= */}
-      <header className="h-16 px-6 bg-white border-b border-[#e5e8e1] flex items-center justify-between gap-4 flex-shrink-0 z-30">
-        {/* Brand & Sidebar Toggle */}
-        <div className="flex items-center gap-2 min-w-[200px]">
+      <header className="h-16 bg-white border-b border-[#e5e8e1] flex items-center justify-between flex-shrink-0 z-30">
+        {/* Brand & Sidebar Toggle (matches sidebar width exactly) */}
+        <div
+          className={`h-full flex items-center border-r border-[#e5e8e1] transition-all duration-200 flex-shrink-0 ${
+            sidebarCollapsed ? 'w-16 px-2 justify-center' : 'w-60 px-4 justify-between'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <button
+              onClick={() => handleSelectNav('my-drive')}
+              className="flex items-center gap-2.5 hover:opacity-90 transition cursor-pointer text-left flex-shrink-0"
+              title="Go to My Drive"
+            >
+              <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+              </div>
+              {!sidebarCollapsed && (
+                <span className="font-semibold text-base tracking-tight text-[#1e2419] whitespace-nowrap">
+                  Smart Drive
+                </span>
+              )}
+            </button>
+          </div>
           {sessionId && (
             <button
               onClick={() => setSidebarCollapsed((v) => !v)}
-              className="p-2 rounded-xl text-[#6b7362] hover:bg-[#f2f4ef] hover:text-[#1e2419] transition cursor-pointer"
+              className="p-1.5 rounded-lg text-[#6b7362] hover:bg-[#f2f4ef] hover:text-[#1e2419] transition cursor-pointer flex-shrink-0"
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              {sidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
           )}
-          <button
-            onClick={() => handleSelectNav('my-drive')}
-            className="flex items-center gap-2.5 hover:opacity-90 transition cursor-pointer text-left"
-            title="Go to My Drive"
-          >
-            <div className="w-9 h-9 rounded-xl bg-[#4d602c] text-white flex items-center justify-center shadow-sm">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
-            </div>
-            <span className="font-semibold text-lg tracking-tight text-[#1e2419]">Smart Drive</span>
-          </button>
         </div>
+
+        {/* Search Bar & User Actions */}
+        <div className="flex-1 flex items-center justify-between gap-4 px-6 min-w-0">
 
         {/* Search Bar */}
         {sessionId && (
@@ -637,6 +650,7 @@ export default function App() {
             </div>
           )}
         </div>
+      </div>
       </header>
 
       {/* ================= MAIN CONTENT ================= */}
@@ -1168,17 +1182,11 @@ export default function App() {
                 e.preventDefault();
                 setIsResizing(true);
               }}
-              className={`w-2 -ml-1 z-20 cursor-col-resize transition-all flex items-center justify-center select-none group relative ${
+              className={`w-1.5 -ml-1 z-20 cursor-col-resize transition-all select-none relative ${
                 isResizing ? 'bg-[#4d602c]' : 'bg-transparent hover:bg-[#4d602c]/20'
               }`}
               title="Drag left or right to resize My Drive & Assistant"
-            >
-              <div
-                className={`w-0.5 h-10 rounded-full transition-colors ${
-                  isResizing ? 'bg-white' : 'bg-[#c5cfb3] group-hover:bg-[#4d602c]'
-                }`}
-              />
-            </div>
+            />
           )}
 
           {/* ================= RIGHT: ASSISTANT PANEL ================= */}
