@@ -206,11 +206,25 @@ def delete_account(session_id: str = Query(...)):
 # ----------------- DRIVE EXPLORER ROUTES -----------------
 
 @app.get("/api/drive/files")
-def list_files(folder_id: str = "root", view: str = "my-drive", session_id: str = Query(...)):
-    """List files and folders inside specified folder or navigation view."""
+def list_files(
+    folder_id: str = "root",
+    view: str = "my-drive",
+    page_size: int = 50,
+    page_token: Optional[str] = Query(None),
+    session_id: str = Query(...)
+):
+    """List files and folders inside specified folder or navigation view with pagination."""
     drive = get_drive_service(session_id)
-    files = drive.list_files_in_folder(folder_id=folder_id, view=view)
-    return {"files": files}
+    result = drive.list_files_in_folder(
+        folder_id=folder_id,
+        view=view,
+        page_size=page_size,
+        page_token=page_token
+    )
+    return {
+        "files": result.get("files", []),
+        "nextPageToken": result.get("nextPageToken")
+    }
 
 @app.post("/api/drive/star")
 def star_file(file_id: str = Query(...), starred: bool = Query(True), session_id: str = Query(...)):

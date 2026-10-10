@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Settings,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   Plus,
   RefreshCw,
@@ -146,6 +147,12 @@ export default function App() {
   const [currentFolder, setCurrentFolder] = useState('root');
   const [folderHistory, setFolderHistory] = useState([{ id: 'root', name: 'My Drive' }]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+
+  // Pagination state (like Gmail & Google Drive)
+  const [nextPageToken, setNextPageToken] = useState(null);
+  const [pageHistory, setPageHistory] = useState([null]); // array of pageTokens for previous pages
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   // Theme state: 'light' or 'dark' (explicitly manual toggle, no system theme listener)
   const [theme, setTheme] = useState(() => {
@@ -311,11 +318,17 @@ export default function App() {
     }
   };
 
-  const fetchFiles = async (folderId = currentFolder, navView = selectedNav) => {
+  const fetchFiles = async (folderId = currentFolder, navView = selectedNav, token = null, pageNum = 1) => {
     setLoadingFiles(true);
     try {
-      const res = await axios.get(`${API_BASE}/drive/files?folder_id=${folderId}&view=${navView}&session_id=${sessionId}`);
+      let url = `${API_BASE}/drive/files?folder_id=${folderId}&view=${navView}&session_id=${sessionId}&page_size=${pageSize}`;
+      if (token) {
+        url += `&page_token=${encodeURIComponent(token)}`;
+      }
+      const res = await axios.get(url);
       setFiles(res.data.files || []);
+      setNextPageToken(res.data.nextPageToken || null);
+      setCurrentPage(pageNum);
       setSelectedFileIds(new Set());
     } catch (err) {
       console.error('Error fetching files:', err);
@@ -324,28 +337,52 @@ export default function App() {
     }
   };
 
+  const handleNextPage = () => {
+    if (!nextPageToken || loadingFiles) return;
+    const newPageNum = currentPage + 1;
+    setPageHistory((prev) => [...prev, nextPageToken]);
+    fetchFiles(currentFolder, selectedNav, nextPageToken, newPageNum);
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage <= 1 || loadingFiles) return;
+    const newPageNum = currentPage - 1;
+    const newHistory = [...pageHistory];
+    newHistory.pop(); // remove current token
+    const prevToken = newHistory[newHistory.length - 1] || null;
+    setPageHistory(newHistory);
+    fetchFiles(currentFolder, selectedNav, prevToken, newPageNum);
+  };
+
+  const resetPaginationAndFetch = (folderId, navView) => {
+    setPageHistory([null]);
+    setCurrentPage(1);
+    setNextPageToken(null);
+    fetchFiles(folderId, navView, null, 1);
+  };
+
   const handleSelectNav = (navId) => {
     setSelectedNav(navId);
     if (navId === 'my-drive') {
       setCurrentFolder('root');
       setFolderHistory([{ id: 'root', name: 'My Drive' }]);
-      fetchFiles('root', 'my-drive');
+      resetPaginationAndFetch('root', 'my-drive');
     } else if (navId === 'shared') {
       setCurrentFolder('shared');
       setFolderHistory([{ id: 'shared', name: 'Shared with me' }]);
-      fetchFiles('root', 'shared');
+      resetPaginationAndFetch('root', 'shared');
     } else if (navId === 'recent') {
       setCurrentFolder('recent');
       setFolderHistory([{ id: 'recent', name: 'Recent' }]);
-      fetchFiles('root', 'recent');
+      resetPaginationAndFetch('root', 'recent');
     } else if (navId === 'starred') {
       setCurrentFolder('starred');
       setFolderHistory([{ id: 'starred', name: 'Starred' }]);
-      fetchFiles('root', 'starred');
+      resetPaginationAndFetch('root', 'starred');
     } else if (navId === 'trash') {
       setCurrentFolder('trash');
       setFolderHistory([{ id: 'trash', name: 'Trash' }]);
-      fetchFiles('root', 'trash');
+      resetPaginationAndFetch('root', 'trash');
     }
   };
 
@@ -353,7 +390,7 @@ export default function App() {
     setCurrentFolder(folder.id);
     setSelectedNav('my-drive');
     setFolderHistory((prev) => [...prev, folder]);
-    fetchFiles(folder.id, 'my-drive');
+    resetPaginationAndFetch(folder.id, 'my-drive');
   };
 
   const navigateBreadcrumb = (index) => {
@@ -364,7 +401,7 @@ export default function App() {
     } else {
       setSelectedNav('my-drive');
       setCurrentFolder(target.id);
-      fetchFiles(target.id, 'my-drive');
+      resetPaginationAndFetch(target.id, 'my-drive');
     }
   };
 
@@ -1215,12 +1252,36 @@ export default function App() {
 
                 {/* Refresh */}
                 <button
-                  onClick={() => fetchFiles(currentFolder, selectedNav)}
+                  onClick={() => fetchFiles(currentFolder, selectedNav, pageHistory[currentPage - 1] || null, currentPage)}
                   className="p-2 text-[#6b7362] hover:bg-[#f7f8f6] rounded-xl border border-[#e5e8e1] transition cursor-pointer"
                   title="Refresh folder"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingFiles ? 'animate-spin' : ''}`} />
                 </button>
+
+                {/* Gmail & Drive Style Pagination Stack */}
+                <div className="flex items-center gap-1 bg-white border border-[#e5e8e1] rounded-xl p-1 text-xs text-[#5a6252]">
+                  <span className="px-2 text-[11px] font-medium text-[#6b7362] whitespace-nowrap">
+                    Page {currentPage} {visibleFiles.length > 0 && <span className="text-[#8a9282]">({visibleFiles.length} items)</span>}
+                  </span>
+                  <div className="h-4 w-px bg-[#e5e8e1]" />
+                  <button
+                    onClick={handlePrevPage}
+                    disabled={currentPage <= 1 || loadingFiles}
+                    className="p-1 rounded-lg hover:bg-[#f7f8f6] text-[#5a6252] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                    title="Previous page (newer files)"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={!nextPageToken || loadingFiles}
+                    className="p-1 rounded-lg hover:bg-[#f7f8f6] text-[#5a6252] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                    title="Next page (older files)"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
 
                 {/* View Switchers */}
                 <div className="flex items-center border border-[#e5e8e1] rounded-xl p-0.5 bg-white">
@@ -1627,6 +1688,38 @@ export default function App() {
                   </tbody>
                 </table>
               )}
+            </div>
+
+            {/* Bottom Pagination Bar (Gmail / Drive style) */}
+            <div className="px-6 py-2.5 bg-white border-t border-[#e5e8e1] flex items-center justify-between text-xs text-[#6b7362] flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span>
+                  Showing {visibleFiles.length} item{visibleFiles.length !== 1 ? 's' : ''} on page {currentPage}
+                </span>
+                {loadingFiles && <span className="text-[#8a9282] italic text-[11px]">(Updating...)</span>}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handlePrevPage}
+                  disabled={currentPage <= 1 || loadingFiles}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#e5e8e1] bg-white hover:bg-[#f7f8f6] text-[#2c3327] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer text-xs font-medium"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Previous</span>
+                </button>
+                <span className="px-2 py-1 rounded-lg bg-[#f2f4ef] text-[#1e2419] font-semibold text-xs">
+                  {currentPage}
+                </span>
+                <button
+                  onClick={handleNextPage}
+                  disabled={!nextPageToken || loadingFiles}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#e5e8e1] bg-white hover:bg-[#f7f8f6] text-[#2c3327] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer text-xs font-medium"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </main>
 

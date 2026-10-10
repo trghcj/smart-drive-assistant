@@ -18,7 +18,8 @@ class DriveAgent:
         to return an explanation and an executable list of ProposedOperations.
         """
         # 1. Fetch current context: files in root / current folder
-        current_files = self.drive.list_files_in_folder(folder_id=current_folder_id, page_size=100)
+        res_folder = self.drive.list_files_in_folder(folder_id=current_folder_id, page_size=100)
+        current_files = res_folder.get("files", [])
         
         # If user asks about spreadsheets, images, PDFs, documents, or deleting/searching, actively query matching files across Drive
         query_lower = user_prompt.lower()

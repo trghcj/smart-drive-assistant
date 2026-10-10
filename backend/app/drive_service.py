@@ -26,8 +26,8 @@ class DriveService:
 
         self.service = build("drive", "v3", credentials=self.creds)
 
-    def list_files_in_folder(self, folder_id: str = "root", view: str = "my-drive", page_size: int = 60) -> List[Dict[str, Any]]:
-        """List contents of a specific folder or special view (shared, recent, starred, trash)."""
+    def list_files_in_folder(self, folder_id: str = "root", view: str = "my-drive", page_size: int = 50, page_token: Optional[str] = None) -> Dict[str, Any]:
+        """List contents of a specific folder or special view with pagination support."""
         if view == "shared":
             query = "sharedWithMe = true and trashed = false"
             order = "sharedWithMeTime desc"
@@ -44,22 +44,24 @@ class DriveService:
             query = f"'{folder_id}' in parents and trashed = false"
             order = "folder, name"
 
+        list_params = {
+            "q": query,
+            "pageSize": page_size,
+            "fields": "nextPageToken, files(id, name, mimeType, size, modifiedTime, parents, webViewLink, iconLink, starred, trashed)",
+            "orderBy": order
+        }
+        if page_token:
+            list_params["pageToken"] = page_token
+
         try:
-            results = self.service.files().list(
-                q=query,
-                pageSize=page_size,
-                fields="files(id, name, mimeType, size, modifiedTime, parents, webViewLink, iconLink, starred, trashed)",
-                orderBy=order
-            ).execute()
+            results = self.service.files().list(**list_params).execute()
         except Exception:
-            results = self.service.files().list(
-                q=query,
-                pageSize=page_size,
-                fields="files(id, name, mimeType, size, modifiedTime, parents, webViewLink, iconLink, starred, trashed)"
-            ).execute()
+            results = self.service.files().list(**list_params).execute()
 
         files = results.get("files", [])
-        return [
+        next_page_token = results.get("nextPageToken")
+
+        file_items = [
             {
                 "id": f["id"],
                 "name": f["name"],
@@ -74,6 +76,11 @@ class DriveService:
             }
             for f in files
         ]
+
+        return {
+            "files": file_items,
+            "nextPageToken": next_page_token
+        }
 
     def toggle_star_file(self, file_id: str, starred: bool = True) -> Dict[str, Any]:
         """Star or unstar a file."""
