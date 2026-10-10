@@ -377,6 +377,15 @@ def execute_plan(req: ExecutePlanRequest, session_id: str = Query(...)):
                     "name": pdf.get("name")
                 })
 
+        elif op.type in ["DELETE_FILE", "DELETE_FOLDER"]:
+            if op.file_id:
+                drive.delete_permanently(file_id=op.file_id)
+                executed.append({
+                    "type": op.type,
+                    "file_id": op.file_id,
+                    "file_name": op.file_name or op.folder_name or "Item"
+                })
+
     undo_token = str(uuid.uuid4())[:8]
     if undo_actions:
         UNDO_STORE[undo_token] = undo_actions

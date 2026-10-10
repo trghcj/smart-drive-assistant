@@ -19,7 +19,7 @@ class DriveItem(BaseModel):
 
 class ProposedOperation(BaseModel):
     id: str
-    type: str  # "CREATE_FOLDER", "MOVE_FILE", "RENAME_FILE", "SHARE_FILE", "CREATE_DOC", "EXPORT_PDF"
+    type: str  # "CREATE_FOLDER", "MOVE_FILE", "RENAME_FILE", "SHARE_FILE", "CREATE_DOC", "EXPORT_PDF", "DELETE_FILE", "DELETE_FOLDER"
     file_id: Optional[str] = None
     file_name: Optional[str] = None
     folder_name: Optional[str] = None

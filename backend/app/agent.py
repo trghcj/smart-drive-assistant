@@ -20,9 +20,9 @@ class DriveAgent:
         # 1. Fetch current context: files in root / current folder
         current_files = self.drive.list_files_in_folder(folder_id=current_folder_id, page_size=60)
         
-        # If user asks about the whole drive, images, or searching, include search results
+        # If user asks about the whole drive, images, or searching/deleting, include search results
         query_lower = user_prompt.lower()
-        if any(w in query_lower for w in ["whole drive", "entire drive", "all drive", "any image", "search", "where", "find"]):
+        if any(w in query_lower for w in ["whole drive", "entire drive", "all drive", "any image", "search", "where", "find", "delete", "remove", "clean"]):
             try:
                 extra_files = self.drive.search_files(text_query="", page_size=50)
                 existing_ids = {f["id"] for f in current_files}
@@ -83,7 +83,13 @@ class DriveAgent:
             "   - 'RENAME_FILE': { file_id, file_name, new_name, reason }\n"
             "   - 'SHARE_FILE': { file_id, file_name, email, role: 'reader'|'writer', reason }\n"
             "   - 'CREATE_DOC': { doc_title, target_folder_name, doc_content: 'Full structured analysis report text to write inside the document', reason }\n"
-            "   - 'EXPORT_PDF': { file_id, file_name, reason }\n\n"
+            "   - 'EXPORT_PDF': { file_id, file_name, reason }\n"
+            "   - 'DELETE_FILE': { file_id, file_name, reason: 'Specific reason for permanent deletion' }\n"
+            "   - 'DELETE_FOLDER': { file_id, folder_name, reason: 'Specific reason for permanent deletion of folder' }\n\n"
+            "5. DELETION SAFETY & PERMISSION:\n"
+            "   - When the user asks to delete files (e.g. 'delete all png images', 'delete invoice.pdf', 'delete old folder'), inspect available files, identify the exact target files or folders, and return 'DELETE_FILE' or 'DELETE_FOLDER' operations.\n"
+            "   - In 'explanation', clearly list the items you found and state that you have queued them for permanent deletion pending user approval.\n"
+            "   - The user will be prompted to approve the deletion plan before anything is deleted.\n\n"
             "CRITICAL: When generating a summary report or analysis document (CREATE_DOC), ALWAYS populate 'doc_content' with the comprehensive summary, metrics, and findings so the created Google Doc is populated and not blank!\n\n"
             "Format your response as valid JSON matching this schema:\n"
             "{\n"

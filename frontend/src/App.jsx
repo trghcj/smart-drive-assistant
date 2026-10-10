@@ -1610,18 +1610,51 @@ export default function App() {
                                   Move <strong>{op.file_name}</strong> &rarr; <span className="text-[#4d602c] font-medium">{op.target_folder_name}</span>
                                 </p>
                               )}
+                              {op.type === 'CREATE_DOC' && (
+                                <p className="text-[#1e2419]">
+                                  Create Doc: <strong>{op.doc_title}</strong>
+                                </p>
+                              )}
+                              {op.type === 'SHARE_FILE' && (
+                                <p className="text-[#1e2419]">
+                                  Share <strong>{op.file_name}</strong> with <span className="font-medium">{op.email}</span> ({op.role})
+                                </p>
+                              )}
+                              {op.type === 'DELETE_FILE' && (
+                                <div className="flex items-center gap-1.5 text-rose-600 font-medium">
+                                  <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                  <span>Permanently delete file: <strong>{op.file_name}</strong></span>
+                                </div>
+                              )}
+                              {op.type === 'DELETE_FOLDER' && (
+                                <div className="flex items-center gap-1.5 text-rose-600 font-medium">
+                                  <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                  <span>Permanently delete folder: <strong>{op.folder_name}</strong></span>
+                                </div>
+                              )}
                               {op.reason && <p className="text-[10px] text-[#8a9282] italic mt-0.5">{op.reason}</p>}
                             </div>
                           ))}
                         </div>
 
+                        {proposedPlan.operations.some(op => ['DELETE_FILE', 'DELETE_FOLDER'].includes(op.type)) && (
+                          <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 text-[11px] text-rose-700 font-medium flex items-center gap-1.5">
+                            <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>Warning: This plan contains permanent file/folder deletions.</span>
+                          </div>
+                        )}
+
                         <div className="flex gap-2 pt-1">
                           <button
                             onClick={handleExecutePlan}
                             disabled={executing}
-                            className="flex-1 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl font-medium transition cursor-pointer text-xs"
+                            className={`flex-1 py-2 text-white rounded-xl font-medium transition cursor-pointer text-xs ${
+                              proposedPlan.operations.some(op => ['DELETE_FILE', 'DELETE_FOLDER'].includes(op.type))
+                                ? 'bg-rose-600 hover:bg-rose-700'
+                                : 'bg-[#4d602c] hover:bg-[#3f4f24]'
+                            }`}
                           >
-                            {executing ? 'Executing...' : 'Approve & Execute'}
+                            {executing ? 'Executing...' : proposedPlan.operations.some(op => ['DELETE_FILE', 'DELETE_FOLDER'].includes(op.type)) ? 'Approve & Delete Permanently' : 'Approve & Execute'}
                           </button>
                           <button
                             onClick={() => setProposedPlan(null)}

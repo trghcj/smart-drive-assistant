@@ -91,6 +91,11 @@ class DriveService:
             fields="id, name, trashed"
         ).execute()
 
+    def delete_permanently(self, file_id: str) -> bool:
+        """Permanently delete a file or folder from Google Drive."""
+        self.service.files().delete(fileId=file_id).execute()
+        return True
+
     def search_files(self, text_query: str = "", mime_type: Optional[str] = None, page_size: int = 40) -> List[Dict[str, Any]]:
         """Search files by name, full-text or mimeType."""
         query_parts = ["trashed = false"]
