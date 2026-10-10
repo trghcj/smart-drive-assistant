@@ -93,8 +93,15 @@ class DriveService:
 
     def delete_permanently(self, file_id: str) -> bool:
         """Permanently delete a file or folder from Google Drive."""
-        self.service.files().delete(fileId=file_id).execute()
-        return True
+        from googleapiclient.errors import HttpError
+        try:
+            self.service.files().delete(fileId=file_id).execute()
+            return True
+        except HttpError as err:
+            # 404 indicates file was already deleted or not found
+            if err.resp.status == 404:
+                return False
+            raise err
 
     def search_files(self, text_query: str = "", mime_type: Optional[str] = None, page_size: int = 40) -> List[Dict[str, Any]]:
         """Search files by name, full-text or mimeType."""
