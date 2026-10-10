@@ -29,16 +29,98 @@
     font-family: var(--font-sans);
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  html.dark body {
+    background: #0f120e;
+    color: #e4e8df;
   }
   ::selection { background: var(--color-accent-soft); }
+  html.dark ::selection { background: #34401c; color: #f0f4ea; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #c8d6b9; border-radius: 999px; }
   ::-webkit-scrollbar-thumb:hover { background: #9bb185; }
+  html.dark ::-webkit-scrollbar-thumb { background: #2f3824; }
+  html.dark ::-webkit-scrollbar-thumb:hover { background: #455235; }
   button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 1px;
   }
+}
+
+/* ================= DARK MODE OVERRIDES ================= */
+html.dark .bg-\[\#f7f8f6\] {
+  background-color: #0d100c !important;
+}
+html.dark .bg-white {
+  background-color: #171c14 !important;
+}
+html.dark .bg-\[\#f2f4ef\],
+html.dark .bg-\[\#f2f5ed\],
+html.dark .bg-\[\#f2f6ea\],
+html.dark .bg-\[\#fcfdfa\],
+html.dark .bg-\[\#fbfcf9\] {
+  background-color: #1c2319 !important;
+}
+html.dark .hover\:bg-\[\#f7f8f6\]:hover,
+html.dark .hover\:bg-\[\#f2f4ef\]:hover,
+html.dark .hover\:bg-\[\#ebeee7\]:hover,
+html.dark .hover\:bg-\[\#fbfcf9\]:hover,
+html.dark .hover\:bg-\[\#e4ebd8\]:hover {
+  background-color: #232b1f !important;
+}
+
+/* Borders */
+html.dark .border-\[\#e5e8e1\],
+html.dark .border-\[\#f0f2eb\],
+html.dark .border-\[\#f2f4ef\],
+html.dark .border-\[\#d2dec0\],
+html.dark .divide-\[\#f7f8f6\] > :not([hidden]) ~ :not([hidden]),
+html.dark .border-b-\[\#e5e8e1\] {
+  border-color: #273121 !important;
+}
+
+/* Primary text & headings */
+html.dark .text-\[\#1e2419\],
+html.dark .text-\[\#2c3327\],
+html.dark .text-\[\#2f3d1b\],
+html.dark .text-\[\#3d4d23\] {
+  color: #e4e8df !important;
+}
+
+/* Secondary & Muted text */
+html.dark .text-\[\#6b7362\],
+html.dark .text-\[\#5a6252\],
+html.dark .text-\[\#7b8371\] {
+  color: #a7b19e !important;
+}
+html.dark .text-\[\#8a9282\] {
+  color: #7d8873 !important;
+}
+
+/* Active / Selection Highlights */
+html.dark .bg-\[\#edf2e4\] {
+  background-color: #26331a !important;
+}
+html.dark .border-\[\#c8d6b9\] {
+  border-color: #3b4d26 !important;
+}
+
+/* Inputs & Modals in Dark Mode */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  color: #e4e8df !important;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6e7964 !important;
+}
+
+/* Modals & Dropdowns backdrop */
+html.dark .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.7) !important;
 }
 
 @layer components {

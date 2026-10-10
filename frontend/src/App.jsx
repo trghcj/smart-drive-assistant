@@ -36,7 +36,9 @@ import {
   FolderSync,
   PanelLeftClose,
   PanelLeftOpen,
-  Share2
+  Share2,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -144,6 +146,24 @@ export default function App() {
   const [currentFolder, setCurrentFolder] = useState('root');
   const [folderHistory, setFolderHistory] = useState([{ id: 'root', name: 'My Drive' }]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+
+  // Theme state: 'light' or 'dark' (explicitly manual toggle, no system theme listener)
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('drive_theme') || 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('drive_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   // Search & view mode
   const [search, setSearch] = useState('');
@@ -843,6 +863,20 @@ export default function App() {
 
         {/* Right Nav Actions */}
         <div className="flex items-center gap-3">
+          {/* Light / Dark Theme Toggle Button */}
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center w-9 h-9 rounded-xl bg-[#f2f4ef] hover:bg-[#e4ebdb] text-[#3d4d23] border border-[#e5e8e1] transition cursor-pointer shadow-xs"
+            title={theme === 'dark' ? 'Switch to Light theme' : 'Switch to Dark theme'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400 hover:rotate-45 transition-transform" />
+            ) : (
+              <Moon className="w-4 h-4 text-[#4d602c] hover:-rotate-12 transition-transform" />
+            )}
+          </button>
+
           {/* User Profile Pill */}
           {sessionId && userProfile && (
             <div className="relative">
