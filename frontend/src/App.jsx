@@ -783,10 +783,13 @@ export default function App() {
   };
 
   const suggestions = [
+    { text: 'Delete all .xls and spreadsheet files', icon: 'trash' },
+    { text: 'Delete all .png and .jpeg images', icon: 'trash' },
+    { text: 'Delete all .pdf documents', icon: 'trash' },
     { text: 'Find all invoice PDFs', icon: 'file' },
     { text: 'Group placement documents', icon: 'folder' },
     { text: 'Find duplicate files', icon: 'copy' },
-    { text: 'Create a folder for images', icon: 'image' },
+    { text: 'Organize files by type into folders', icon: 'folder' },
   ];
 
   const visibleFiles = files.filter((f) =>
@@ -1884,8 +1887,14 @@ export default function App() {
 
                 {/* Example Quick Pills */}
                 <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto text-[10px]">
-                  <span className="text-[#8a9282] font-semibold flex-shrink-0">Examples:</span>
-                  {['Find large files', 'Organize PDFs', 'Move files'].map((pill) => (
+                  <span className="text-[#8a9282] font-semibold flex-shrink-0">Shortcuts:</span>
+                  {[
+                    'Delete all .xls files',
+                    'Delete all .pdf files',
+                    'Delete all .png, .jpeg & .svg',
+                    'Organize PDFs',
+                    'Find large files'
+                  ].map((pill) => (
                     <button
                       key={pill}
                       onClick={() => openAssistantWith(pill)}
