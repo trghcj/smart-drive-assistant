@@ -226,6 +226,13 @@ def trash_file(file_id: str = Query(...), trashed: bool = Query(True), session_i
     res = drive.toggle_trash_file(file_id=file_id, trashed=trashed)
     return {"success": True, "file": res}
 
+@app.delete("/api/drive/delete-permanent")
+def delete_permanent(file_id: str = Query(...), session_id: str = Query(...)):
+    """Permanently delete a file or folder from Google Drive."""
+    drive = get_drive_service(session_id)
+    drive.delete_permanently(file_id=file_id)
+    return {"success": True, "message": "Item permanently deleted."}
+
 @app.post("/api/drive/share")
 def share_drive_item(file_id: str = Query(...), email: str = Query(...), role: str = Query("reader"), session_id: str = Query(...)):
     """Share file or folder with an email address."""

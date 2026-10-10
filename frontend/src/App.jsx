@@ -389,13 +389,26 @@ export default function App() {
   const handleToggleTrash = async (file, e) => {
     e?.stopPropagation();
     const isTrashed = file.trashed;
-    const msg = isTrashed ? `Restore "${file.name}"?` : `Move "${file.name}" to Trash?`;
+    const msg = isTrashed ? `Restore "${file.name}" to Drive?` : `Move "${file.name}" to Trash?`;
     if (!window.confirm(msg)) return;
     try {
       await axios.post(`${API_BASE}/drive/trash?file_id=${file.id}&trashed=${!isTrashed}&session_id=${sessionId}`);
       fetchFiles(currentFolder, selectedNav);
     } catch (err) {
       console.error('Error updating trash state:', err);
+    }
+  };
+
+  const handleDeletePermanently = async (file, e) => {
+    e?.stopPropagation();
+    const msg = `⚠️ PERMANENT DELETION\n\nAre you sure you want to permanently delete "${file.name}"?\nThis action CANNOT be undone and will permanently remove the item from Google Drive.`;
+    if (!window.confirm(msg)) return;
+    try {
+      await axios.delete(`${API_BASE}/drive/delete-permanent?file_id=${file.id}&session_id=${sessionId}`);
+      fetchFiles(currentFolder, selectedNav);
+    } catch (err) {
+      console.error('Error permanently deleting file:', err);
+      alert(`Failed to delete permanently: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -625,6 +638,27 @@ export default function App() {
     } catch (err) {
       console.error('Error trashing selected files:', err);
       alert(`Failed to trash some items: ${err.message}`);
+    }
+  };
+
+  const handleBulkDeletePermanently = async () => {
+    const count = selectedFileIds.size;
+    if (count === 0) return;
+    const msg = `⚠️ PERMANENT DELETION\n\nAre you sure you want to permanently delete all ${count} selected item(s)?\nThis action CANNOT be undone and will permanently remove them from Google Drive.`;
+    if (!window.confirm(msg)) return;
+
+    const list = getSelectedFileList();
+    try {
+      await Promise.all(
+        list.map((file) =>
+          axios.delete(`${API_BASE}/drive/delete-permanent?file_id=${file.id}&session_id=${sessionId}`)
+        )
+      );
+      clearSelection();
+      fetchFiles(currentFolder, selectedNav);
+    } catch (err) {
+      console.error('Error permanently deleting selected files:', err);
+      alert(`Failed to delete some items: ${err.message}`);
     }
   };
 
@@ -1226,15 +1260,62 @@ export default function App() {
                     </button>
                   )}
 
-                  {/* Bulk Trash */}
-                  <button
-                    onClick={handleBulkTrash}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl font-medium transition cursor-pointer"
-                    title="Move selected items to Trash"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Move to Trash</span>
-                  </button>
+                  {/* Trash & Permanent Delete buttons */}
+                  {selectedNav === 'trash' ? (
+                    <>
+                      <button
+                        onClick={async () => {
+                          const count = selectedFileIds.size;
+                          if (count === 0) return;
+                          if (!window.confirm(`Restore ${count} selected item(s) to Drive?`)) return;
+                          const list = getSelectedFileList();
+                          try {
+                            await Promise.all(
+                              list.map((file) =>
+                                axios.post(`${API_BASE}/drive/trash?file_id=${file.id}&trashed=false&session_id=${sessionId}`)
+                              )
+                            );
+                            clearSelection();
+                            fetchFiles(currentFolder, selectedNav);
+                          } catch (err) {
+                            alert(`Failed to restore items: ${err.message}`);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#3d4d23] rounded-xl font-medium transition cursor-pointer"
+                        title="Restore selected items"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Restore</span>
+                      </button>
+                      <button
+                        onClick={handleBulkDeletePermanently}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-medium transition cursor-pointer shadow-xs"
+                        title="Delete selected items permanently from Google Drive"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Permanently</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleBulkTrash}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl font-medium transition cursor-pointer"
+                        title="Move selected items to Trash"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Move to Trash</span>
+                      </button>
+                      <button
+                        onClick={handleBulkDeletePermanently}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-medium transition cursor-pointer"
+                        title="Permanently delete from Google Drive"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Delete Permanently</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -1341,13 +1422,32 @@ export default function App() {
                             >
                               <Share2 className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={(e) => handleToggleTrash(item, e)}
-                              className="p-1 rounded hover:bg-rose-50 text-[#8a9282] hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
-                              title={item.trashed ? 'Restore' : 'Move to Trash'}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {selectedNav === 'trash' || item.trashed ? (
+                              <>
+                                <button
+                                  onClick={(e) => handleToggleTrash(item, e)}
+                                  className="p-1 rounded hover:bg-[#f2f4ef] text-[#4d602c] opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                  title="Restore to Drive"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeletePermanently(item, e)}
+                                  className="p-1 rounded hover:bg-rose-50 text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                  title="Delete permanently"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={(e) => handleToggleTrash(item, e)}
+                                className="p-1 rounded hover:bg-rose-50 text-[#8a9282] hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                title="Move to Trash"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             {item.webViewLink && (
                               <a
                                 href={item.webViewLink}
@@ -1444,13 +1544,32 @@ export default function App() {
                               >
                                 <Share2 className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                onClick={(e) => handleToggleTrash(item, e)}
-                                className="p-1 rounded hover:bg-rose-50 text-[#8a9282] hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
-                                title={item.trashed ? 'Restore' : 'Move to Trash'}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {selectedNav === 'trash' || item.trashed ? (
+                                <>
+                                  <button
+                                    onClick={(e) => handleToggleTrash(item, e)}
+                                    className="p-1 rounded hover:bg-[#f2f4ef] text-[#4d602c] opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                    title="Restore to Drive"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleDeletePermanently(item, e)}
+                                    className="p-1 rounded hover:bg-rose-50 text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                    title="Delete permanently"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={(e) => handleToggleTrash(item, e)}
+                                  className="p-1 rounded hover:bg-rose-50 text-[#8a9282] hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                  title="Move to Trash"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               {item.webViewLink && (
                                 <a
                                   href={item.webViewLink}
