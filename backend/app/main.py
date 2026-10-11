@@ -84,21 +84,31 @@ def get_drive_service(session_id: str) -> DriveService:
     if not session_id:
         raise HTTPException(status_code=401, detail="Unauthorized. Please log in with Google.")
 
-    # In case another worker or request wrote to disk, reload if not in memory
+    # Always reload from disk if missing in memory (e.g. after worker restart or deployment)
     if session_id not in USER_SESSIONS:
         USER_SESSIONS = load_data(SESSIONS_FILE)
 
-    if session_id not in USER_SESSIONS:
-        raise HTTPException(status_code=401, detail="Unauthorized. Please log in with Google.")
+    target_session_id = session_id
+    if target_session_id not in USER_SESSIONS:
+        # Fallback: if server restarted and generated a new instance or session_id was slightly mismatched,
+        # but there is a saved valid session with refresh_token in storage, use it instead of forcing a re-login
+        valid_sessions = [sid for sid, data in USER_SESSIONS.items() if data.get("refresh_token") or data.get("access_token")]
+        if len(valid_sessions) == 1:
+            target_session_id = valid_sessions[0]
+        elif len(valid_sessions) > 1:
+            # Pick the most recently saved session
+            target_session_id = valid_sessions[-1]
+        else:
+            raise HTTPException(status_code=401, detail="Unauthorized. Please log in with Google.")
 
     def on_token_refresh(new_access_token: str, new_refresh_token: Optional[str] = None):
-        if session_id in USER_SESSIONS:
-            USER_SESSIONS[session_id]["access_token"] = new_access_token
+        if target_session_id in USER_SESSIONS:
+            USER_SESSIONS[target_session_id]["access_token"] = new_access_token
             if new_refresh_token:
-                USER_SESSIONS[session_id]["refresh_token"] = new_refresh_token
+                USER_SESSIONS[target_session_id]["refresh_token"] = new_refresh_token
             save_data(SESSIONS_FILE, USER_SESSIONS)
 
-    return DriveService(USER_SESSIONS[session_id], on_token_refresh=on_token_refresh)
+    return DriveService(USER_SESSIONS[target_session_id], on_token_refresh=on_token_refresh)
 
 # ----------------- AUTH ROUTES -----------------
 

@@ -14,15 +14,18 @@ class DriveService:
             client_secret=credentials_info.get("client_secret"),
             scopes=credentials_info.get("scopes")
         )
-        # Check and auto-refresh credentials if expired or missing access token
-        try:
-            if not self.creds.valid:
-                request = Request()
-                self.creds.refresh(request)
-                if on_token_refresh and self.creds.token:
-                    on_token_refresh(self.creds.token, self.creds.refresh_token)
-        except Exception as e:
-            print(f"Warning: Token refresh attempt: {e}")
+        # Automatically refresh credentials if expired or about to expire
+        if self.creds.refresh_token:
+            try:
+                if not self.creds.valid or not self.creds.token:
+                    request = Request()
+                    self.creds.refresh(request)
+                    if on_token_refresh and self.creds.token:
+                        on_token_refresh(self.creds.token, self.creds.refresh_token)
+            except Exception as e:
+                print(f"Notice: Credential auto-refresh: {e}")
+        elif not self.creds.valid:
+            print("Warning: Access token is expired and no refresh_token is available in session.")
 
         self.service = build("drive", "v3", credentials=self.creds)
 

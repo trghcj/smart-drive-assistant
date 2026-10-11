@@ -305,7 +305,7 @@ export default function App() {
     }
   };
 
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = async (retry = true) => {
     try {
       const res = await axios.get(`${API_BASE}/auth/me?session_id=${sessionId}`);
       setUserProfile(res.data.user);
@@ -313,7 +313,12 @@ export default function App() {
     } catch (err) {
       console.error('Fetch user error:', err);
       if (err.response?.status === 401) {
-        handleLogout();
+        if (retry) {
+          // Retry once after a brief pause in case backend server just spun up from sleep or auto-refreshed token
+          setTimeout(() => fetchUserProfile(false), 2000);
+        } else {
+          handleLogout();
+        }
       }
     }
   };
