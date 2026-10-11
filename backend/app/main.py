@@ -372,6 +372,26 @@ def execute_plan(req: ExecutePlanRequest, session_id: str = Query(...)):
                         "current_folder": target_id
                     })
 
+        elif op.type == "RENAME_FILE":
+            if op.file_id and op.new_name:
+                try:
+                    drive.rename_file(file_id=op.file_id, new_name=op.new_name)
+                    executed.append({
+                        "type": "RENAME_FILE",
+                        "file_id": op.file_id,
+                        "old_name": op.file_name,
+                        "new_name": op.new_name
+                    })
+                    # Register undo step: rename back to old_name
+                    if op.file_name:
+                        undo_actions.append({
+                            "type": "RENAME_FILE",
+                            "file_id": op.file_id,
+                            "original_name": op.file_name
+                        })
+                except Exception as e:
+                    print(f"Notice: Failed to rename {op.file_id}: {e}")
+
         elif op.type == "SHARE_FILE":
             if op.file_id and op.email:
                 drive.share_file(file_id=op.file_id, email=op.email, role=op.role or "reader")
@@ -483,13 +503,17 @@ def undo_last_operation(undo_token: str = Query(...), session_id: str = Query(..
 
     for act in actions:
         try:
-            drive.move_file(
-                file_id=act["file_id"],
-                target_folder_id=act["restore_to"],
-                current_parent_id=act["current_folder"]
-            )
-            reverted_count += 1
+            if act.get("type") == "RENAME_FILE":
+                drive.rename_file(file_id=act["file_id"], new_name=act["original_name"])
+                reverted_count += 1
+            else:
+                drive.move_file(
+                    file_id=act["file_id"],
+                    target_folder_id=act["restore_to"],
+                    current_parent_id=act["current_folder"]
+                )
+                reverted_count += 1
         except Exception:
             pass
 
-    return {"success": True, "message": f"Successfully reverted {reverted_count} file movements."}
+    return {"success": True, "message": f"Successfully reverted {reverted_count} action(s)."}

@@ -778,6 +778,8 @@ export default function App() {
     let query = '';
     if (action === 'organize') {
       query = `Please organize these ${list.length} selected files: ${names}`;
+    } else if (action === 'rename') {
+      query = `Auto-rename and standardize names for these ${list.length} selected files: ${names} based on their content and purpose`;
     } else if (action === 'summarize') {
       query = `Please summarize the purpose and details of these ${list.length} selected files: ${names}`;
     } else if (action === 'archive') {
@@ -848,6 +850,7 @@ export default function App() {
   };
 
   const suggestions = [
+    { text: 'Auto-rename poorly named files with standard names', icon: 'sparkles' },
     { text: 'Delete all .xls and spreadsheet files', icon: 'trash' },
     { text: 'Delete all .png and .jpeg images', icon: 'trash' },
     { text: 'Delete all .pdf documents', icon: 'trash' },
@@ -1378,6 +1381,16 @@ export default function App() {
                     <span>Ask Assistant</span>
                   </button>
 
+                  {/* Auto-Rename Selected */}
+                  <button
+                    onClick={() => handleBulkAskAssistant('rename')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    title="Ask assistant to standardize names of selected files"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-[#4d602c]" />
+                    <span>Auto-Rename</span>
+                  </button>
+
                   {/* Bulk Star / Unstar */}
                   <button
                     onClick={handleBulkStar}
@@ -1904,6 +1917,11 @@ export default function App() {
                                   Move <strong>{op.file_name}</strong> &rarr; <span className="text-[#4d602c] font-medium">{op.target_folder_name}</span>
                                 </p>
                               )}
+                              {op.type === 'RENAME_FILE' && (
+                                <p className="text-[#1e2419]">
+                                  Rename <strong>{op.file_name}</strong> &rarr; <span className="text-[#4d602c] font-semibold">{op.new_name}</span>
+                                </p>
+                              )}
                               {op.type === 'CREATE_DOC' && (
                                 <p className="text-[#1e2419]">
                                   Create Doc: <strong>{op.doc_title}</strong>
@@ -2027,6 +2045,7 @@ export default function App() {
                 <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto text-[10px]">
                   <span className="text-[#8a9282] font-semibold flex-shrink-0">Shortcuts:</span>
                   {[
+                    'Auto-rename messy files',
                     'Delete all .xls files',
                     'Delete all .pdf files',
                     'Delete all .png, .jpeg & .svg',
