@@ -439,6 +439,12 @@ def get_duplicates(folder_id: str = "root", session_id: str = Query(...)):
     dups = drive.find_duplicates(folder_id=folder_id)
     return {"duplicates": dups}
 
+@app.get("/api/drive/audit-storage")
+def audit_storage(session_id: str = Query(...)):
+    """Analyze storage hogs, zombie files, and public sharing permissions with 0 AI token usage."""
+    drive = get_drive_service(session_id)
+    return drive.audit_storage_and_security()
+
 from apscheduler.schedulers.background import BackgroundScheduler
 SCHEDULER = BackgroundScheduler()
 SCHEDULER.start()

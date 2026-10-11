@@ -39,7 +39,9 @@ import {
   PanelLeftOpen,
   Share2,
   Sun,
-  Moon
+  Moon,
+  ShieldAlert,
+  Globe
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -200,6 +202,10 @@ export default function App() {
   const [duplicatesModal, setDuplicatesModal] = useState(false);
   const [duplicateList, setDuplicateList] = useState([]);
   const [scanningDuplicates, setScanningDuplicates] = useState(false);
+  const [auditModal, setAuditModal] = useState(false);
+  const [auditData, setAuditData] = useState({ large_files: [], zombie_files: [], public_files: [] });
+  const [auditingStorage, setAuditingStorage] = useState(false);
+  const [auditTab, setAuditTab] = useState('large'); // 'large', 'zombie', 'public'
   const [scheduleModal, setScheduleModal] = useState(false);
   const [scheduleCron, setScheduleCron] = useState('every_friday');
   const [scheduleFolder, setScheduleFolder] = useState('Weekly Archive');
@@ -529,6 +535,23 @@ export default function App() {
       console.error('Scan error:', err);
     } finally {
       setScanningDuplicates(false);
+    }
+  };
+
+  const handleAuditStorage = async () => {
+    setAuditingStorage(true);
+    setAuditModal(true);
+    try {
+      const res = await axios.get(`${API_BASE}/drive/audit-storage?session_id=${sessionId}`);
+      setAuditData({
+        large_files: res.data.large_files || [],
+        zombie_files: res.data.zombie_files || [],
+        public_files: res.data.public_files || []
+      });
+    } catch (err) {
+      console.error('Audit error:', err);
+    } finally {
+      setAuditingStorage(false);
     }
   };
 
@@ -1077,6 +1100,16 @@ export default function App() {
                 )}
                 <div className="space-y-1 w-full">
                   <button
+                    onClick={handleAuditStorage}
+                    title="Storage & Security Audit"
+                    className={`w-full flex items-center rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer ${
+                      sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'
+                    }`}
+                  >
+                    <ShieldAlert className="w-4 h-4 text-[#7b8371] flex-shrink-0" />
+                    {!sidebarCollapsed && <span>Storage audit</span>}
+                  </button>
+                  <button
                     onClick={handleScanDuplicates}
                     title="Find duplicates"
                     className={`w-full flex items-center rounded-xl text-xs font-medium text-[#5a6252] hover:bg-[#f7f8f6] hover:text-[#1e2419] transition cursor-pointer ${
@@ -1209,6 +1242,13 @@ export default function App() {
                     <>
                       <div className="fixed inset-0 z-30" onClick={() => setOrganizeMenu(false)} />
                       <div className="absolute right-0 top-full mt-1.5 w-60 bg-white border border-[#e5e8e1] rounded-2xl shadow-xl py-2 z-40 text-xs text-[#2c3327]">
+                        <button
+                          onClick={() => { setOrganizeMenu(false); handleAuditStorage(); }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
+                        >
+                          <ShieldAlert className="w-4 h-4 text-[#8a9282]" />
+                          <span>Storage & Security audit</span>
+                        </button>
                         <button
                           onClick={() => { setOrganizeMenu(false); handleScanDuplicates(); }}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-[#f7f8f6] transition cursor-pointer"
@@ -2059,6 +2099,163 @@ export default function App() {
             <div className="pt-3 border-t border-[#f0f2eb] flex justify-end">
               <button
                 onClick={() => setDuplicatesModal(false)}
+                className="px-4 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white text-xs rounded-xl font-medium cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Storage & Security Audit Modal (Zero AI token usage & instant) */}
+      {auditModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-[#e5e8e1] rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-[#f0f2eb]">
+              <div className="flex items-center gap-2 text-[#4d602c]">
+                <ShieldAlert className="w-5 h-5 text-amber-600" />
+                <div>
+                  <h3 className="font-bold text-base text-[#1e2419]">Storage & Security Audit</h3>
+                  <p className="text-[11px] text-[#8a9282]">Instant zero-token analysis of space hogs and public links</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAuditModal(false)}
+                className="text-[#8a9282] hover:text-[#1e2419] text-xs px-2.5 py-1 rounded-lg bg-[#f7f8f6] cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Audit Tabs */}
+            <div className="flex border-b border-[#e5e8e1] pt-3 text-xs font-semibold gap-2">
+              <button
+                onClick={() => setAuditTab('large')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                  auditTab === 'large' ? 'border-[#4d602c] text-[#4d602c]' : 'border-transparent text-[#8a9282] hover:text-[#1e2419]'
+                }`}
+              >
+                <HardDrive className="w-3.5 h-3.5" />
+                <span>Large Files ({auditData.large_files.length})</span>
+              </button>
+              <button
+                onClick={() => setAuditTab('zombie')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                  auditTab === 'zombie' ? 'border-[#4d602c] text-[#4d602c]' : 'border-transparent text-[#8a9282] hover:text-[#1e2419]'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Zombie / Stale ({auditData.zombie_files.length})</span>
+              </button>
+              <button
+                onClick={() => setAuditTab('public')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                  auditTab === 'public' ? 'border-amber-600 text-amber-600' : 'border-transparent text-[#8a9282] hover:text-[#1e2419]'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>Public / Shared ({auditData.public_files.length})</span>
+              </button>
+            </div>
+
+            {/* Audit Content List */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-2.5">
+              {auditingStorage ? (
+                <div className="text-center py-12 text-[#8a9282] text-xs animate-pulse">
+                  Scanning Drive files for size, inactivity, and access permissions...
+                </div>
+              ) : auditTab === 'large' ? (
+                auditData.large_files.length === 0 ? (
+                  <div className="text-center py-12 text-[#4d602c] text-xs font-medium">
+                    🎉 No unusually large files (&gt;10MB) taking up space!
+                  </div>
+                ) : (
+                  auditData.large_files.map((file) => (
+                    <div key={file.id} className="p-3 bg-[#fcfdfa] rounded-xl border border-[#e5e8e1] flex items-center justify-between text-xs hover:border-[#4d602c] transition">
+                      <div className="flex items-center gap-3 min-w-0 pr-3">
+                        <HardDrive className="w-4 h-4 text-[#8a9282] flex-shrink-0" />
+                        <span className="font-medium text-[#1e2419] truncate">{file.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="font-bold text-[#4d602c]">{formatSize(file.size)}</span>
+                        <button
+                          onClick={() => handleToggleTrash(file)}
+                          className="px-2.5 py-1 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-lg text-xs font-medium cursor-pointer"
+                        >
+                          Trash
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : auditTab === 'zombie' ? (
+                auditData.zombie_files.length === 0 ? (
+                  <div className="text-center py-12 text-[#4d602c] text-xs font-medium">
+                    ✨ No untouched zombie files found from the last 6 months!
+                  </div>
+                ) : (
+                  auditData.zombie_files.map((file) => (
+                    <div key={file.id} className="p-3 bg-[#fcfdfa] rounded-xl border border-[#e5e8e1] flex items-center justify-between text-xs hover:border-[#4d602c] transition">
+                      <div className="flex items-center gap-3 min-w-0 pr-3">
+                        <Clock className="w-4 h-4 text-[#8a9282] flex-shrink-0" />
+                        <span className="font-medium text-[#1e2419] truncate">{file.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-[11px] text-[#8a9282]">{formatDate(file.modifiedTime)}</span>
+                        <button
+                          onClick={() => handleToggleTrash(file)}
+                          className="px-2.5 py-1 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] text-[#5a6252] rounded-lg text-xs font-medium cursor-pointer"
+                        >
+                          Archive to Trash
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : (
+                auditData.public_files.length === 0 ? (
+                  <div className="text-center py-12 text-[#4d602c] text-xs font-medium">
+                    🔒 Great job! No files are publicly exposed or shared without restrictions.
+                  </div>
+                ) : (
+                  auditData.public_files.map((file) => (
+                    <div key={file.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/60 flex items-center justify-between text-xs hover:border-amber-400 transition">
+                      <div className="flex items-center gap-3 min-w-0 pr-3">
+                        <Globe className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span className="font-medium text-[#1e2419] truncate">{file.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleOpenShareModal(file)}
+                          className="px-2.5 py-1 bg-white border border-amber-200 hover:bg-amber-50 text-amber-800 rounded-lg text-xs font-medium cursor-pointer"
+                        >
+                          Manage Permissions
+                        </button>
+                        {file.webViewLink && (
+                          <a
+                            href={file.webViewLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1 text-[#8a9282] hover:text-[#1e2419]"
+                            title="Open file in Drive"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-[#f0f2eb] flex items-center justify-between">
+              <span className="text-[10px] text-[#8a9282]">
+                Tip: Clean up files to reclaim your Google Drive storage quota.
+              </span>
+              <button
+                onClick={() => setAuditModal(false)}
                 className="px-4 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white text-xs rounded-xl font-medium cursor-pointer"
               >
                 Done
