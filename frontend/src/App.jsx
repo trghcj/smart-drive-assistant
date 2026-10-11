@@ -41,7 +41,8 @@ import {
   Sun,
   Moon,
   ShieldAlert,
-  Globe
+  Globe,
+  FolderArchive
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
@@ -203,9 +204,16 @@ export default function App() {
   const [duplicateList, setDuplicateList] = useState([]);
   const [scanningDuplicates, setScanningDuplicates] = useState(false);
   const [auditModal, setAuditModal] = useState(false);
-  const [auditData, setAuditData] = useState({ large_files: [], zombie_files: [], public_files: [] });
+  const [auditData, setAuditData] = useState({ large_files: [], zombie_files: [], public_files: [], archivable_by_year: {} });
   const [auditingStorage, setAuditingStorage] = useState(false);
-  const [auditTab, setAuditTab] = useState('large'); // 'large', 'zombie', 'public'
+  const [auditTab, setAuditTab] = useState('large'); // 'large', 'zombie', 'public', 'archive'
+  const [summaryModal, setSummaryModal] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [summarizingFile, setSummarizingFile] = useState(null);
+  const [summarizingLoading, setSummarizingLoading] = useState(false);
+  const [liveSyncEnabled, setLiveSyncEnabled] = useState(true);
+  const [lastEventTime, setLastEventTime] = useState(() => Date.now() / 1000);
+  const [liveNotification, setLiveNotification] = useState(null);
   const [scheduleModal, setScheduleModal] = useState(false);
   const [scheduleCron, setScheduleCron] = useState('every_friday');
   const [scheduleFolder, setScheduleFolder] = useState('Weekly Archive');
@@ -279,6 +287,34 @@ export default function App() {
       fetchFiles(currentFolder, selectedNav);
     }
   }, [sessionId, currentFolder, selectedNav]);
+
+  // Real-time Drive Webhook & Live Sync listener (0 Gemini tokens, lightweight)
+  useEffect(() => {
+    if (!sessionId || !liveSyncEnabled) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/drive/events?since=${lastEventTime}`);
+        if (res.data?.events && res.data.events.length > 0) {
+          const newest = Math.max(...res.data.events.map((e) => e.timestamp || 0));
+          setLastEventTime(newest);
+          setLiveNotification('Drive updated remotely • File list refreshed');
+          fetchFiles(currentFolder, selectedNav);
+        }
+      } catch (err) {
+        // Silent catch for live poll
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [sessionId, liveSyncEnabled, lastEventTime, currentFolder, selectedNav]);
+
+  // Auto-dismiss live notification toast after 4s
+  useEffect(() => {
+    if (!liveNotification) return;
+    const timer = setTimeout(() => setLiveNotification(null), 4000);
+    return () => clearTimeout(timer);
+  }, [liveNotification]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -546,12 +582,33 @@ export default function App() {
       setAuditData({
         large_files: res.data.large_files || [],
         zombie_files: res.data.zombie_files || [],
-        public_files: res.data.public_files || []
+        public_files: res.data.public_files || [],
+        archivable_by_year: res.data.archivable_by_year || {}
       });
     } catch (err) {
       console.error('Audit error:', err);
     } finally {
       setAuditingStorage(false);
+    }
+  };
+
+  const handleQuickSummarize = async (file) => {
+    if (!file) return;
+    setSummarizingFile(file);
+    setSummarizingLoading(true);
+    setSummaryModal(true);
+    setSummaryData(null);
+    try {
+      const res = await axios.post(`${API_BASE}/drive/summarize?file_id=${file.id}&session_id=${sessionId}`);
+      setSummaryData(res.data);
+    } catch (err) {
+      console.error('Failed to summarize file:', err);
+      setSummaryData({
+        file_name: file.name,
+        summary: `Notice: ${err.response?.data?.detail || err.message}`
+      });
+    } finally {
+      setSummarizingLoading(false);
     }
   };
 
@@ -851,6 +908,8 @@ export default function App() {
 
   const suggestions = [
     { text: 'Auto-rename poorly named files with standard names', icon: 'sparkles' },
+    { text: 'Summarize key documents and placement files', icon: 'file' },
+    { text: 'Archive files older than 6 months into Archive/YYYY', icon: 'folder' },
     { text: 'Delete all .xls and spreadsheet files', icon: 'trash' },
     { text: 'Delete all .png and .jpeg images', icon: 'trash' },
     { text: 'Delete all .pdf documents', icon: 'trash' },
@@ -1298,6 +1357,20 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Live Sync Status Indicator & Toggle */}
+                <button
+                  onClick={() => setLiveSyncEnabled((v) => !v)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                    liveSyncEnabled
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800 hover:bg-emerald-100/60'
+                      : 'bg-white border-[#e5e8e1] text-[#8a9282] hover:bg-[#f7f8f6]'
+                  }`}
+                  title={liveSyncEnabled ? "Live Push Sync Active: Automatic background file updates" : "Live Sync Paused: Click to enable real-time updates"}
+                >
+                  <span className={`w-2 h-2 rounded-full ${liveSyncEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
+                  <span className="text-[11px] hidden sm:inline">{liveSyncEnabled ? 'Live Sync' : 'Sync Paused'}</span>
+                </button>
+
                 {/* Refresh */}
                 <button
                   onClick={() => fetchFiles(currentFolder, selectedNav, pageHistory[currentPage - 1] || null, currentPage)}
@@ -1389,6 +1462,33 @@ export default function App() {
                   >
                     <Sparkles className="w-3.5 h-3.5 text-[#4d602c]" />
                     <span>Auto-Rename</span>
+                  </button>
+
+                  {/* Summarize Selected */}
+                  <button
+                    onClick={() => {
+                      const list = getSelectedFileList();
+                      if (list.length === 1 && !list[0].isFolder) {
+                        handleQuickSummarize(list[0]);
+                      } else {
+                        handleBulkAskAssistant('summarize');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    title="Summarize document and extract key insights"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#4d602c]" />
+                    <span>Summarize</span>
+                  </button>
+
+                  {/* Archive Selected */}
+                  <button
+                    onClick={() => handleBulkAskAssistant('archive')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    title="Archive selected files into an Archive folder"
+                  >
+                    <FolderArchive className="w-3.5 h-3.5 text-[#4d602c]" />
+                    <span>Archive</span>
                   </button>
 
                   {/* Bulk Star / Unstar */}
@@ -1700,6 +1800,15 @@ export default function App() {
                               >
                                 <Share2 className="w-3.5 h-3.5" />
                               </button>
+                              {!item.isFolder && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleQuickSummarize(item); }}
+                                  className="p-1 rounded hover:bg-[#f2f4ef] text-[#8a9282] hover:text-[#4d602c] opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                                  title="AI Quick Summary & Insights"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               {selectedNav === 'trash' || item.trashed ? (
                                 <>
                                   <button
@@ -2046,6 +2155,8 @@ export default function App() {
                   <span className="text-[#8a9282] font-semibold flex-shrink-0">Shortcuts:</span>
                   {[
                     'Auto-rename messy files',
+                    'Summarize selected files',
+                    'Archive old files by year',
                     'Delete all .xls files',
                     'Delete all .pdf files',
                     'Delete all .png, .jpeg & .svg',
@@ -2176,6 +2287,15 @@ export default function App() {
                 <Globe className="w-3.5 h-3.5" />
                 <span>Public / Shared ({auditData.public_files.length})</span>
               </button>
+              <button
+                onClick={() => setAuditTab('archive')}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+                  auditTab === 'archive' ? 'border-[#4d602c] text-[#4d602c]' : 'border-transparent text-[#8a9282] hover:text-[#1e2419]'
+                }`}
+              >
+                <FolderArchive className="w-3.5 h-3.5" />
+                <span>Archive by Year ({Object.keys(auditData.archivable_by_year || {}).length})</span>
+              </button>
             </div>
 
             {/* Audit Content List */}
@@ -2232,7 +2352,7 @@ export default function App() {
                     </div>
                   ))
                 )
-              ) : (
+              ) : auditTab === 'public' ? (
                 auditData.public_files.length === 0 ? (
                   <div className="text-center py-12 text-[#4d602c] text-xs font-medium">
                     🔒 Great job! No files are publicly exposed or shared without restrictions.
@@ -2265,6 +2385,65 @@ export default function App() {
                       </div>
                     </div>
                   ))
+                )
+              ) : (
+                Object.keys(auditData.archivable_by_year || {}).length === 0 ? (
+                  <div className="text-center py-12 text-[#4d602c] text-xs font-medium">
+                    ✨ No stale files found from prior years to archive!
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-[#edf2e4] rounded-2xl border border-[#c8d6b9] flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-[#2c3327]">Automated Archival Policy</h4>
+                        <p className="text-[11px] text-[#5a6252]">
+                          Group files untouched for &gt;180 days into Archive/YYYY folders with 1 click.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setAuditModal(false);
+                          const yrs = Object.keys(auditData.archivable_by_year).join(', ');
+                          openAssistantWith(`Organize and archive older files from years ${yrs} into dedicated Archive/YYYY folders`);
+                        }}
+                        className="px-3.5 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl text-xs font-semibold cursor-pointer shadow-sm transition"
+                      >
+                        Archive All by Year
+                      </button>
+                    </div>
+
+                    {Object.entries(auditData.archivable_by_year).map(([year, files]) => (
+                      <div key={year} className="p-3 bg-[#fcfdfa] rounded-xl border border-[#e5e8e1]">
+                        <div className="flex items-center justify-between pb-2 border-b border-[#f2f4ef] mb-2">
+                          <span className="font-bold text-xs text-[#1e2419] flex items-center gap-1.5">
+                            <FolderArchive className="w-3.5 h-3.5 text-[#4d602c]" />
+                            <span>Year {year}</span>
+                            <span className="text-[10px] text-[#8a9282] font-normal">({files.length} files)</span>
+                          </span>
+                          <button
+                            onClick={() => {
+                              setAuditModal(false);
+                              openAssistantWith(`Create an Archive/${year} folder and move all files from year ${year} into it`);
+                            }}
+                            className="px-2.5 py-1 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#4d602c] rounded-lg text-xs font-medium cursor-pointer"
+                          >
+                            Archive {year} Files
+                          </button>
+                        </div>
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                          {files.slice(0, 8).map((f) => (
+                            <div key={f.id} className="flex items-center justify-between text-[11px] text-[#5a6252]">
+                              <span className="truncate pr-2">{f.name}</span>
+                              <span className="text-[#8a9282] flex-shrink-0">{formatDate(f.modifiedTime)}</span>
+                            </div>
+                          ))}
+                          {files.length > 8 && (
+                            <p className="text-[10px] text-[#8a9282] italic">+ {files.length - 8} more files</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )
               )}
             </div>
@@ -2499,6 +2678,89 @@ export default function App() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Quick Document Summary & Q&A Modal */}
+      {summaryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-[#e5e8e1] shadow-2xl max-w-xl w-full p-6 text-[#1e2419]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#e5e8e1]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#edf2e4] text-[#4d602c] flex items-center justify-center">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-[#1e2419] truncate max-w-md">
+                    {summarizingFile?.name || 'Document Intelligence'}
+                  </h3>
+                  <p className="text-[11px] text-[#8a9282]">AI Executive Summary & Insights</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSummaryModal(false)}
+                className="p-1.5 text-[#8a9282] hover:text-[#1e2419] rounded-xl hover:bg-[#f7f8f6] transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="py-4 min-h-[160px] max-h-[380px] overflow-y-auto text-xs leading-relaxed">
+              {summarizingLoading ? (
+                <div className="flex flex-col items-center justify-center py-10 text-[#8a9282] gap-2">
+                  <Sparkles className="w-6 h-6 text-[#4d602c] animate-spin" />
+                  <span className="text-xs">Analyzing document contents with Gemini...</span>
+                </div>
+              ) : (
+                <div className="bg-[#fcfdfa] p-4 rounded-2xl border border-[#e5e8e1]">
+                  <FormattedMessage text={summaryData?.summary || 'No summary available.'} />
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-[#e5e8e1] flex items-center justify-between gap-2">
+              <button
+                onClick={() => {
+                  if (summaryData?.summary) {
+                    navigator.clipboard.writeText(summaryData.summary);
+                    alert('Summary copied to clipboard!');
+                  }
+                }}
+                disabled={summarizingLoading || !summaryData?.summary}
+                className="px-3 py-2 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Copy className="w-3.5 h-3.5 text-[#8a9282]" />
+                <span>Copy Summary</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setSummaryModal(false);
+                    openAssistantWith(`What are the key takeaways from ${summarizingFile?.name}? Let's analyze details.`);
+                  }}
+                  className="px-3.5 py-2 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Ask AI Follow-up</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Real-time remote notification toast */}
+      {liveNotification && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1e2419] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-xs animate-in slide-in-from-bottom-5">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span>{liveNotification}</span>
+          <button
+            onClick={() => setLiveNotification(null)}
+            className="text-white/60 hover:text-white p-0.5 ml-1 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>

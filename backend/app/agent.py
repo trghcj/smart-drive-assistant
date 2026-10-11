@@ -78,12 +78,19 @@ class DriveAgent:
 
         sorted_files = sorted(current_files, key=match_priority)
 
+        is_qa_or_summary = any(k in user_prompt_lower for k in ["summar", "what is", "explain", "key takeaway", "q&a", "tell me about", "inside", "details of", "compare", "read"])
+
         # Inspect snippets for relevant files to conserve API limits & quota
         for idx, f in enumerate(sorted_files[:60]):
             snippet = None
             if not f["isFolder"] and idx < 15:
-                # Use compact 350 max_chars snippet
-                snippet = self.drive.get_file_content_snippet(f["id"], f["mimeType"], max_chars=350)
+                if is_qa_or_summary and idx < 2:
+                    # Deep inspection for target QA / summary files (up to 3500 chars / ~700 tokens)
+                    qa_res = self.drive.get_document_text_for_qa(f["id"], f["mimeType"], max_chars=3500)
+                    snippet = qa_res.get("text")
+                else:
+                    # Compact 300 max_chars snippet
+                    snippet = self.drive.get_file_content_snippet(f["id"], f["mimeType"], max_chars=300)
 
             files_with_context.append({
                 "id": f["id"],
@@ -118,7 +125,7 @@ class DriveAgent:
             "   - Do NOT overuse bold asterisks ('**'). Use bold sparingly only for file names or crucial numbers.\n"
             "   - Do NOT use unnecessary slashes, escaped characters, or raw markdown artifacts.\n"
             "   - Format lists with clean bullet dashes ('•' or '-') or simple numbered steps (1., 2.).\n"
-            "   - Keep your 'explanation' crisp, minimal, and informative (under 200 words).\n"
+            "   - Keep your 'explanation' crisp, minimal, and informative (under 250 words).\n"
             "5. Supported operation types:\n"
             "   - 'CREATE_FOLDER': { folder_name, parent_id, reason }\n"
             "   - 'MOVE_FILE': { file_id, file_name, source_folder_id, target_folder_name, reason }\n"
@@ -138,6 +145,17 @@ class DriveAgent:
             "   - When the user asks to delete files (e.g. 'delete all xls files', 'delete all png images', 'delete invoice.pdf', 'delete old folder'), identify ALL matching target files or folders from 'available_files', and return 'DELETE_FILE' or 'DELETE_FOLDER' operations for every matching file.\n"
             "   - In 'explanation', clearly list how many files you found and state that you have queued them for permanent deletion pending user approval.\n"
             "   - The user will be prompted to approve the deletion plan before anything is deleted.\n\n"
+            "8. SMART DOCUMENT SUMMARIZATION & Q&A:\n"
+            "   - When the user asks to summarize a document, explain what is inside, or asks questions about specific files:\n"
+            "     * Carefully analyze the provided 'content_preview' snippet.\n"
+            "     * Synthesize a clear, executive breakdown: Summary, Key Findings / Dates / Numbers, and Action Items.\n"
+            "     * If user asks to save the summary or create a document, return a 'CREATE_DOC' operation with 'doc_title' and 'doc_content'.\n\n"
+            "9. AUTOMATED ARCHIVAL WORKFLOWS:\n"
+            "   - When user asks to archive old files or group files by year (e.g. 'archive files older than 6 months', 'archive 2024 files', 'auto-group files into Archive/YYYY'):\n"
+            "     * Check the 'modifiedTime' of available files.\n"
+            "     * Group eligible older files into 'Archive/{YYYY}' (e.g. 'Archive/2024', 'Archive/2023').\n"
+            "     * Propose 'CREATE_FOLDER' (e.g. folder_name: 'Archive/2024') and 'MOVE_FILE' operations for each archived file.\n"
+            "     * In 'explanation', clearly state how many files are scheduled for archiving into their respective year folders.\n\n"
             "CRITICAL: When generating a summary report or analysis document (CREATE_DOC), ALWAYS populate 'doc_content' with the comprehensive summary, metrics, and findings so the created Google Doc is populated and not blank!\n\n"
             "Format your response as valid JSON matching this schema:\n"
             "{\n"
@@ -228,3 +246,48 @@ class DriveAgent:
                 explanation=f"Error generating plan: {str(e)}",
                 operations=[]
             )
+
+    def summarize_document(self, file_id: str) -> Dict[str, Any]:
+        """
+        Extract document content and generate a crisp executive summary.
+        Keeps token consumption strictly bounded under 800 tokens.
+        """
+        meta = self.drive.service.files().get(fileId=file_id, fields="id, name, mimeType").execute()
+        fname = meta.get("name", "Document")
+        fmime = meta.get("mimeType", "")
+
+        extracted = self.drive.get_document_text_for_qa(file_id, fmime, max_chars=3500)
+        doc_text = extracted.get("text", "")
+
+        prompt = (
+            f"You are a document intelligence AI. Provide a clean, executive summary of this document.\n"
+            f"File Name: {fname}\n"
+            f"File Type: {fmime}\n\n"
+            f"Document Content Preview:\n{doc_text}\n\n"
+            "Generate a response in clean markdown with the following sections:\n"
+            "**Executive Summary**: 2-3 sentences overview.\n"
+            "**Key Findings & Details**: 3-5 bullet points covering the most important facts, numbers, or topics.\n"
+            "**Action Items / Deadlines**: Any next steps or dates mentioned (or 'None' if not applicable).\n"
+            "Keep the response crisp, accurate, under 250 words, and formatted beautifully without hashtag headers."
+        )
+
+        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        summary = ""
+        for m in models_to_try:
+            try:
+                res = self.client.models.generate_content(model=m, contents=prompt)
+                if res and res.text:
+                    summary = res.text.strip()
+                    break
+            except Exception:
+                continue
+
+        if not summary:
+            summary = "Unable to generate summary at this moment. Please verify the document has readable text."
+
+        return {
+            "success": True,
+            "file_id": file_id,
+            "file_name": fname,
+            "summary": summary
+        }

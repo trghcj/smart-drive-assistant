@@ -517,3 +517,106 @@ def undo_last_operation(undo_token: str = Query(...), session_id: str = Query(..
             pass
 
     return {"success": True, "message": f"Successfully reverted {reverted_count} action(s)."}
+
+# ----------------- DOCUMENT SUMMARIZATION & QA -----------------
+
+@app.post("/api/drive/summarize")
+def summarize_file(file_id: str = Query(...), session_id: str = Query(...)):
+    """Extract bounded document text and generate an executive summary with zero server lag."""
+    try:
+        drive = get_drive_service(session_id)
+        agent = DriveAgent(drive)
+        res = agent.summarize_document(file_id=file_id)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ----------------- GOOGLE DRIVE WEBHOOKS & REAL-TIME EVENTS -----------------
+
+RECENT_DRIVE_EVENTS: List[Dict[str, Any]] = []
+ACTIVE_WATCH_CHANNELS: Dict[str, Dict[str, Any]] = {}
+
+@app.post("/api/drive/webhook")
+async def drive_webhook_receiver(request: Request):
+    """
+    Webhook endpoint receiving real-time push notifications from Google Drive (files.watch / changes.watch).
+    Awaits Google sync pings and records state transitions with 0 Gemini tokens and <10ms response time.
+    """
+    import time
+    channel_id = request.headers.get("X-Goog-Channel-ID")
+    state = request.headers.get("X-Goog-Resource-State", "change") # sync, add, update, trash, etc.
+    res_uri = request.headers.get("X-Goog-Resource-URI", "")
+
+    if state != "sync": # Ignore initial handshake sync ping
+        RECENT_DRIVE_EVENTS.append({
+            "channel_id": channel_id,
+            "state": state,
+            "resource_uri": res_uri,
+            "timestamp": time.time()
+        })
+        if len(RECENT_DRIVE_EVENTS) > 50:
+            RECENT_DRIVE_EVENTS.pop(0)
+
+    return {"status": "ok", "state": state}
+
+@app.post("/api/drive/watch")
+def start_drive_watch(
+    session_id: str = Query(...),
+    webhook_url: Optional[str] = Query(None)
+):
+    """
+    Register a Google Drive push notification channel.
+    Google requires a public HTTPS endpoint (such as Render production domain or ngrok).
+    """
+    target_url = webhook_url or os.getenv("DRIVE_WEBHOOK_URL")
+    if not target_url or not target_url.startswith("https://"):
+        return {
+            "success": False,
+            "requires_public_https": True,
+            "message": "Google Drive Webhooks require a public HTTPS URL (like Render production URL or ngrok). Real-time background sync is active as fallback."
+        }
+
+    try:
+        drive = get_drive_service(session_id)
+        channel_id = str(uuid.uuid4())
+        watch_res = drive.watch_changes(webhook_url=target_url, channel_id=channel_id)
+        ACTIVE_WATCH_CHANNELS[session_id] = {
+            "channel_id": channel_id,
+            "resource_id": watch_res.get("resourceId"),
+            "expiration": watch_res.get("expiration")
+        }
+        return {
+            "success": True,
+            "channel": ACTIVE_WATCH_CHANNELS[session_id]
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/api/drive/stop-watch")
+def stop_drive_watch(session_id: str = Query(...)):
+    """Stop active push notification channel for the current session."""
+    active = ACTIVE_WATCH_CHANNELS.get(session_id)
+    if not active:
+        return {"success": True, "message": "No active watch channel to stop."}
+
+    try:
+        drive = get_drive_service(session_id)
+        drive.stop_watch(
+            channel_id=active["channel_id"],
+            resource_id=active["resource_id"]
+        )
+        del ACTIVE_WATCH_CHANNELS[session_id]
+        return {"success": True, "message": "Watch channel stopped successfully."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/drive/events")
+def get_drive_events(since: Optional[float] = Query(None)):
+    """Fetch recent drive events for real-time live synchronization."""
+    if since:
+        filtered = [ev for ev in RECENT_DRIVE_EVENTS if ev.get("timestamp", 0) > since]
+        return {"events": filtered, "total": len(filtered)}
+    return {"events": RECENT_DRIVE_EVENTS, "total": len(RECENT_DRIVE_EVENTS)}

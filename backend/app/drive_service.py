@@ -431,8 +431,96 @@ class DriveService:
             except Exception:
                 public_files = []
 
+        # 4. Archival candidate files grouped by year
+        archivable_by_year: Dict[str, List[Dict[str, Any]]] = {}
+        for f in zombie_files:
+            mtime = f.get("modifiedTime")
+            if mtime:
+                year = mtime[:4]
+                if year not in archivable_by_year:
+                    archivable_by_year[year] = []
+                archivable_by_year[year].append(f)
+
         return {
             "large_files": large_files,
             "zombie_files": zombie_files,
-            "public_files": public_files
+            "public_files": public_files,
+            "archivable_by_year": archivable_by_year
         }
+
+    def get_document_text_for_qa(self, file_id: str, mime_type: str, max_chars: int = 4000) -> Dict[str, Any]:
+        """
+        Extract focused text content for Document Summarization and Q&A.
+        Bounded to max_chars (~800 tokens) to guarantee low latency and minimal Gemini token usage.
+        """
+        try:
+            # 1. Google Doc / Presentation -> plain text export
+            if "google-apps.document" in mime_type or "google-apps.kix" in mime_type:
+                res = self.service.files().export(fileId=file_id, mimeType="text/plain").execute()
+                text = res.decode("utf-8", errors="ignore") if isinstance(res, bytes) else str(res)
+                return {"type": "doc", "text": text.strip()[:max_chars], "total_length": len(text)}
+
+            # 2. Google Sheet -> CSV export
+            elif "google-apps.spreadsheet" in mime_type:
+                res = self.service.files().export(fileId=file_id, mimeType="text/csv").execute()
+                text = res.decode("utf-8", errors="ignore") if isinstance(res, bytes) else str(res)
+                lines = [line.strip() for line in text.splitlines() if line.strip()][:40]
+                csv_sample = "\n".join(lines)[:max_chars]
+                return {"type": "sheet", "text": csv_sample, "total_length": len(text)}
+
+            # 3. PDF file -> extract text across first 4-5 pages
+            elif "pdf" in mime_type:
+                import io
+                from pypdf import PdfReader
+                content = self.service.files().get_media(fileId=file_id).execute()
+                reader = PdfReader(io.BytesIO(content))
+                extracted_pages = []
+                for idx, page in enumerate(reader.pages[:5]):
+                    page_txt = (page.extract_text() or "").strip()
+                    if page_txt:
+                        extracted_pages.append(f"--- Page {idx + 1} ---\n{page_txt}")
+                    if sum(len(p) for p in extracted_pages) >= max_chars:
+                        break
+                full_text = "\n\n".join(extracted_pages)[:max_chars]
+                return {"type": "pdf", "text": full_text or "[PDF scanned / no selectable text found]", "page_count": len(reader.pages)}
+
+            # 4. Text, Code, CSV, Markdown, JSON
+            elif any(t in mime_type for t in ["text/", "csv", "json", "markdown"]):
+                content = self.service.files().get_media(fileId=file_id).execute()
+                text = content.decode("utf-8", errors="ignore")
+                return {"type": "text", "text": text.strip()[:max_chars], "total_length": len(text)}
+
+            # 5. Fallback snippet
+            snippet = self.get_file_content_snippet(file_id, mime_type, max_chars=1000)
+            return {"type": "metadata", "text": snippet}
+
+        except Exception as e:
+            return {"type": "error", "text": f"[Content extraction failed: {str(e)}]"}
+
+    def watch_changes(self, webhook_url: str, channel_id: str) -> Dict[str, Any]:
+        """
+        Register a Google Drive push notification channel using changes.watch.
+        Google will send notifications to webhook_url when any file is modified or created.
+        """
+        token_res = self.service.changes().getStartPageToken().execute()
+        start_page_token = token_res.get("startPageToken")
+
+        body = {
+            "id": channel_id,
+            "type": "web_hook",
+            "address": webhook_url,
+            "payload": True
+        }
+        watch_res = self.service.changes().watch(
+            pageToken=start_page_token,
+            body=body
+        ).execute()
+        return watch_res
+
+    def stop_watch(self, channel_id: str, resource_id: str) -> Dict[str, Any]:
+        """Stop an active Google Drive push notification watch channel."""
+        body = {
+            "id": channel_id,
+            "resourceId": resource_id
+        }
+        return self.service.channels().stop(body=body).execute()
