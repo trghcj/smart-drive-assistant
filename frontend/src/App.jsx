@@ -1056,7 +1056,7 @@ export default function App() {
         {/* Brand & Sidebar Toggle (matches sidebar width exactly) */}
         <div
           className={`h-full flex items-center border-r border-[#e5e8e1] transition-all duration-200 flex-shrink-0 ${
-            sidebarCollapsed ? 'w-16 justify-center' : 'w-60 px-4 justify-between'
+            sidebarCollapsed ? 'w-16 justify-center' : 'w-52 px-4 justify-between'
           }`}
         >
           {!sidebarCollapsed ? (
@@ -1244,7 +1244,7 @@ export default function App() {
           {/* ================= LEFT SIDEBAR ================= */}
           <aside
             className={`bg-white border-r border-[#e5e8e1] flex flex-col justify-between flex-shrink-0 h-full overflow-y-auto transition-all duration-200 ${
-              sidebarCollapsed ? 'w-16 p-2 items-center' : 'w-60 p-4'
+              sidebarCollapsed ? 'w-16 p-2 items-center' : 'w-52 p-4'
             }`}
           >
             <div className="space-y-6 w-full">
