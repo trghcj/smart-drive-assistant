@@ -247,6 +247,62 @@ class DriveAgent:
                 operations=[]
             )
 
+    def inspect_image(self, image_bytes: bytes, mime_type: str, user_prompt: str = "") -> Dict[str, Any]:
+        """
+        Describe a chat-attached image with Gemini Flash vision and resolve which Drive folder it belongs in.
+        An image costs a flat ~258 input tokens; output is capped so each call stays well under 1k tokens.
+        """
+        prompt = (
+            "You are a document intelligence AI for a Google Drive organizer. Inspect the attached image.\n"
+            f"User message: {json.dumps(user_prompt or '')}\n\n"
+            "Return ONLY raw JSON (no markdown fences) with exactly these keys:\n"
+            '  "analysis": 2-3 concise sentences describing what the image is, including any key dates, amounts, sender, or context.\n'
+            '  "suggested_folder": the most logical Drive folder name for this image (e.g. "Electricity Bills", "Placement Documents", "Receipts").\n'
+            '  "target_folder": the folder name the user explicitly asked to save into (e.g. "Save to my Invoices folder" -> "Invoices"), or null if they did not name one.\n'
+            '  "suggested_filename": a short descriptive filename without extension (e.g. "BSES_Electricity_Bill_Oct_2026").\n'
+            "Do not invent details that are not visible in the image."
+        )
+
+        contents = [types.Part.from_bytes(data=image_bytes, mime_type=mime_type), prompt]
+        config = types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=400, temperature=0.2)
+
+        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        raw_text = ""
+        last_err = None
+        for m in models_to_try:
+            try:
+                res = self.client.models.generate_content(model=m, contents=contents, config=config)
+                if res and res.text:
+                    raw_text = res.text.strip()
+                    break
+            except Exception as err:
+                last_err = err
+                continue
+
+        if not raw_text:
+            raise last_err or Exception("All Gemini models are temporarily busy. Please retry in a few moments.")
+
+        if raw_text.startswith("```"):
+            lines = raw_text.splitlines()[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            raw_text = "\n".join(lines).strip()
+
+        try:
+            parsed = json.loads(raw_text)
+        except Exception:
+            parsed = {"analysis": raw_text[:500]}
+
+        suggested = (parsed.get("suggested_folder") or "").strip() or "Chat Uploads"
+        explicit = (parsed.get("target_folder") or "").strip() if isinstance(parsed.get("target_folder"), str) else ""
+        return {
+            "analysis": (parsed.get("analysis") or "Image received.").strip(),
+            "suggested_folder": suggested,
+            "target_folder": explicit or suggested,
+            "user_specified_folder": bool(explicit),
+            "suggested_filename": (parsed.get("suggested_filename") or "").strip() or None
+        }
+
     def summarize_document(self, file_id: str) -> Dict[str, Any]:
         """
         Extract document content and generate a crisp executive summary.

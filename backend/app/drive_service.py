@@ -158,6 +158,34 @@ class DriveService:
         ).execute()
         return folder
 
+    def get_or_create_folder(self, folder_name: str, parent_id: str = "root", scope_to_parent: bool = False) -> str:
+        """Return the id of an active folder named folder_name, creating it under parent_id if none exists.
+        By default matches anywhere in Drive; scope_to_parent restricts the match to direct children of parent_id."""
+        escaped = folder_name.replace("\\", "\\\\").replace("'", "\\'")
+        q = f"mimeType = 'application/vnd.google-apps.folder' and name = '{escaped}' and trashed = false"
+        if scope_to_parent:
+            q += f" and '{parent_id}' in parents"
+        results = self.service.files().list(
+            q=q,
+            pageSize=1,
+            fields="files(id, name)",
+            orderBy="modifiedTime desc"
+        ).execute()
+        existing = results.get("files", [])
+        if existing:
+            return existing[0]["id"]
+        return self.create_folder(folder_name, parent_id)["id"]
+
+    def get_or_create_folder_path(self, folder_path: str, parent_id: str = "root") -> str:
+        """Resolve a slash-separated path like 'Archive/2024', creating missing segments."""
+        segments = [s.strip() for s in folder_path.split("/") if s.strip()]
+        if not segments:
+            return parent_id
+        current = self.get_or_create_folder(segments[0], parent_id)
+        for seg in segments[1:]:
+            current = self.get_or_create_folder(seg, current, scope_to_parent=True)
+        return current
+
     def move_file(self, file_id: str, target_folder_id: str, current_parent_id: Optional[str] = None) -> Dict[str, Any]:
         """Move a file from its current parent to target_folder_id."""
         if not current_parent_id:
@@ -186,14 +214,19 @@ class DriveService:
 
     def upload_file(self, filename: str, file_bytes: bytes, mime_type: str, parent_folder_id: str = "root") -> Dict[str, Any]:
         """Upload a file directly to Google Drive."""
-        from googleapiclient.http import MediaIoBaseUpload
         import io
+        return self.upload_file_stream(filename, io.BytesIO(file_bytes), mime_type, parent_folder_id)
 
+    def upload_file_stream(self, filename: str, stream, mime_type: str, parent_folder_id: str = "root") -> Dict[str, Any]:
+        """Upload from a seekable file-like object in chunks, without loading it fully into memory."""
+        from googleapiclient.http import MediaIoBaseUpload
+
+        stream.seek(0)
         file_metadata = {
             "name": filename,
             "parents": [parent_folder_id]
         }
-        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type or "application/octet-stream", resumable=True)
+        media = MediaIoBaseUpload(stream, mimetype=mime_type or "application/octet-stream", chunksize=1024 * 1024, resumable=True)
         uploaded = self.service.files().create(
             body=file_metadata,
             media_body=media,
