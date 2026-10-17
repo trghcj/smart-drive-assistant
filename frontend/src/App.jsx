@@ -42,10 +42,16 @@ import {
   Moon,
   ShieldAlert,
   Globe,
-  FolderArchive
+  FolderArchive,
+  FolderOpen,
+  ImagePlus
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
+
+// Must match ALLOWED_IMAGE_TYPES / MAX_IMAGE_BYTES in backend/app/main.py
+const CHAT_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'];
+const MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024;
 
 // Helper to render assistant messages with clean styling without raw markdown asterisks, hashes, or slashes
 function FormattedMessage({ text }) {
@@ -196,6 +202,10 @@ export default function App() {
   const [undoToken, setUndoToken] = useState(null);
   const [undoMessage, setUndoMessage] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [chatImage, setChatImage] = useState(null); // { file, previewUrl } staged in the chat input
+  const [chatImageError, setChatImageError] = useState(null);
+  const [chatDragActive, setChatDragActive] = useState(false);
+  const [inspectingImage, setInspectingImage] = useState(false);
 
   // Modals & menus
   const [organizeMenu, setOrganizeMenu] = useState(false);
@@ -232,6 +242,11 @@ export default function App() {
 
   const chatEndRef = useRef(null);
   const promptInputRef = useRef(null);
+  // Latest explorer location, read after async saves so the refresh targets where the user is now
+  const currentFolderRef = useRef(currentFolder);
+  const selectedNavRef = useRef(selectedNav);
+  currentFolderRef.current = currentFolder;
+  selectedNavRef.current = selectedNav;
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -630,9 +645,117 @@ export default function App() {
     }
   };
 
+  const attachChatImage = (file) => {
+    if (!file) return;
+    if (!CHAT_IMAGE_TYPES.includes(file.type)) {
+      setChatImageError('Only PNG, JPEG, WEBP or HEIC images can be inspected.');
+      return;
+    }
+    if (file.size > MAX_CHAT_IMAGE_BYTES) {
+      setChatImageError('Image is larger than 10MB.');
+      return;
+    }
+    setChatImageError(null);
+    setChatImage((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return { file, previewUrl: URL.createObjectURL(file) };
+    });
+    promptInputRef.current?.focus();
+  };
+
+  const clearChatImage = () => {
+    setChatImage((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+    setChatImageError(null);
+  };
+
+  const updateImageCard = (cardId, patch) => {
+    setChatLog((prev) => prev.map((m) => (m.id === cardId ? { ...m, ...patch } : m)));
+  };
+
+  const saveChatImage = async (card) => {
+    if (!card.folder?.trim()) {
+      updateImageCard(card.id, { status: 'error', error: 'Enter a folder name.' });
+      return;
+    }
+    updateImageCard(card.id, { status: 'saving', error: null });
+    try {
+      const formData = new FormData();
+      formData.append('file', card.file);
+      formData.append('folder_name', card.folder.trim());
+      if (card.filename?.trim()) formData.append('filename', card.filename.trim());
+      const res = await axios.post(`${API_BASE}/drive/save-image?session_id=${sessionId}`, formData);
+      updateImageCard(card.id, {
+        status: 'saved',
+        savedFile: res.data.file,
+        savedFolderId: res.data.folder_id,
+        savedFolderName: res.data.folder_name
+      });
+      fetchFiles(currentFolderRef.current, selectedNavRef.current);
+    } catch (err) {
+      updateImageCard(card.id, { status: 'error', error: err.response?.data?.detail || err.message });
+    }
+  };
+
+  const openSavedFolder = (folderId, folderName) => {
+    setSelectedNav('my-drive');
+    setCurrentFolder(folderId);
+    setFolderHistory([{ id: 'root', name: 'My Drive' }, { id: folderId, name: folderName }]);
+    resetPaginationAndFetch(folderId, 'my-drive');
+  };
+
+  const handleSendImage = async () => {
+    const { file, previewUrl } = chatImage;
+    const userMessage = prompt.trim();
+    setPrompt('');
+    // previewUrl now belongs to the chat log, so drop the staged image without revoking it
+    setChatImage(null);
+    setChatImageError(null);
+    setChatLog((prev) => [...prev, { role: 'user', text: userMessage, imageUrl: previewUrl }]);
+    setAnalyzing(true);
+    setInspectingImage(true);
+    setProposedPlan(null);
+    setReviewing(false);
+    setActiveTab('activity');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('message', userMessage);
+      const res = await axios.post(`${API_BASE}/agent/inspect-image?session_id=${sessionId}`, formData);
+      const card = {
+        id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        role: 'assistant',
+        kind: 'image',
+        file,
+        previewUrl,
+        analysis: res.data.analysis,
+        suggestedFolder: res.data.suggested_folder,
+        folder: res.data.target_folder,
+        filename: res.data.suggested_filename || '',
+        status: 'pending'
+      };
+      setChatLog((prev) => [...prev, card]);
+      // The user named a folder in their message: save straight away, no extra click needed
+      if (res.data.user_specified_folder) saveChatImage(card);
+    } catch (err) {
+      setChatLog((prev) => [
+        ...prev,
+        { role: 'assistant', text: `Notice: ${err.response?.data?.detail || err.message}` }
+      ]);
+    } finally {
+      setAnalyzing(false);
+      setInspectingImage(false);
+    }
+  };
+
   const handleSendMessage = async (e) => {
     e?.preventDefault();
-    if (!prompt.trim() || analyzing) return;
+    if (analyzing) return;
+    if (chatImage) return handleSendImage();
+    if (!prompt.trim()) return;
 
     const userMessage = prompt;
     setPrompt('');
@@ -1908,8 +2031,31 @@ export default function App() {
           {assistantOpen && (
             <aside
               style={{ width: `${assistantWidth}px` }}
-              className="bg-white border-l border-[#e5e8e1] flex flex-col flex-shrink-0 h-full overflow-hidden"
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes('Files')) return;
+                e.preventDefault();
+                setChatDragActive(true);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) setChatDragActive(false);
+              }}
+              onDrop={(e) => {
+                if (!e.dataTransfer.files?.length) return;
+                e.preventDefault();
+                setChatDragActive(false);
+                const dropped = Array.from(e.dataTransfer.files);
+                const image = dropped.find((f) => f.type.startsWith('image/'));
+                if (image) attachChatImage(image);
+                else handleFileUpload(dropped);
+              }}
+              className="bg-white border-l border-[#e5e8e1] flex flex-col flex-shrink-0 h-full overflow-hidden relative"
             >
+              {chatDragActive && (
+                <div className="absolute inset-3 bg-[#f2f6ea]/95 border-2 border-dashed border-[#4d602c] rounded-2xl flex flex-col items-center justify-center text-[#4d602c] font-semibold text-sm z-30 pointer-events-none">
+                  <ImagePlus className="w-8 h-8 mb-2 animate-bounce" />
+                  Drop an image for AI inspection
+                </div>
+              )}
               {/* Header */}
               <div className="px-5 py-4 border-b border-[#e5e8e1] flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2">
@@ -1976,7 +2122,104 @@ export default function App() {
                     {chatLog.length === 0 ? (
                       <p className="text-center text-[#8a9282] py-8">No conversation yet. Ask a question below!</p>
                     ) : (
-                      chatLog.map((msg, i) => (
+                      chatLog.map((msg, i) => msg.kind === 'image' ? (
+                        <div key={msg.id} className="flex justify-start">
+                          <div className="max-w-[92%] w-full rounded-2xl px-3.5 py-3 bg-[#f7f8f6] border border-[#e5e8e1] text-[#1e2419] space-y-2.5">
+                            <div className="flex items-start gap-2.5">
+                              <img src={msg.previewUrl} alt="" className="w-12 h-12 rounded-lg object-cover border border-[#e5e8e1] flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-[#4d602c] text-[11px] flex items-center gap-1 mb-0.5">
+                                  <Sparkles className="w-3 h-3" /> Image inspection
+                                </p>
+                                <FormattedMessage text={msg.analysis} />
+                              </div>
+                            </div>
+
+                            {msg.status === 'saved' ? (
+                              <div className="bg-white border border-[#e5e8e1] rounded-xl p-2.5 space-y-2">
+                                <p className="flex items-center gap-1.5 text-[11px] text-[#2c3327]">
+                                  <CheckCircle className="w-3.5 h-3.5 text-[#4d602c] flex-shrink-0" />
+                                  <span>Saved <strong>{msg.savedFile?.name}</strong> to <strong>{msg.savedFolderName}</strong></span>
+                                </p>
+                                <div className="flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => openSavedFolder(msg.savedFolderId, msg.savedFolderName.split('/').pop())}
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#e5e8e1] hover:bg-[#f7f8f6] text-[11px] text-[#2c3327] cursor-pointer"
+                                  >
+                                    <FolderOpen className="w-3 h-3" /> Open folder
+                                  </button>
+                                  {msg.savedFile?.webViewLink && (
+                                    <a
+                                      href={msg.savedFile.webViewLink}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#e5e8e1] hover:bg-[#f7f8f6] text-[11px] text-[#2c3327]"
+                                    >
+                                      <ExternalLink className="w-3 h-3" /> View in Drive
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ) : msg.status === 'dismissed' ? (
+                              <p className="text-[10px] text-[#8a9282] italic">Not saved.</p>
+                            ) : (
+                              <div className="bg-white border border-[#e5e8e1] rounded-xl p-2.5 space-y-2">
+                                <label className="block text-[10px] font-semibold text-[#6b7362]">
+                                  Save to folder
+                                  <div className="mt-1 flex items-center gap-1.5 border border-[#e5e8e1] focus-within:border-[#4d602c] rounded-lg px-2 py-1">
+                                    <Folder className="w-3 h-3 text-[#8a9282] flex-shrink-0" />
+                                    <input
+                                      value={msg.folder}
+                                      onChange={(e) => updateImageCard(msg.id, { folder: e.target.value })}
+                                      disabled={msg.status === 'saving'}
+                                      className="flex-1 min-w-0 bg-transparent outline-none text-[11px] font-normal text-[#1e2419]"
+                                    />
+                                  </div>
+                                </label>
+                                <label className="block text-[10px] font-semibold text-[#6b7362]">
+                                  File name
+                                  <input
+                                    value={msg.filename}
+                                    onChange={(e) => updateImageCard(msg.id, { filename: e.target.value })}
+                                    disabled={msg.status === 'saving'}
+                                    placeholder={msg.file?.name}
+                                    className="mt-1 w-full border border-[#e5e8e1] focus:border-[#4d602c] rounded-lg px-2 py-1 bg-transparent outline-none text-[11px] font-normal text-[#1e2419]"
+                                  />
+                                </label>
+                                {msg.folder !== msg.suggestedFolder && msg.suggestedFolder && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateImageCard(msg.id, { folder: msg.suggestedFolder })}
+                                    className="text-[10px] text-[#4d602c] hover:underline cursor-pointer"
+                                  >
+                                    Use suggested: {msg.suggestedFolder}
+                                  </button>
+                                )}
+                                {msg.error && <p className="text-[10px] text-rose-600">{msg.error}</p>}
+                                <div className="flex gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => saveChatImage(msg)}
+                                    disabled={msg.status === 'saving'}
+                                    className="flex-1 py-1.5 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-lg font-medium text-[11px] disabled:opacity-60 cursor-pointer"
+                                  >
+                                    {msg.status === 'saving' ? 'Saving...' : 'Save to Drive'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateImageCard(msg.id, { status: 'dismissed' })}
+                                    disabled={msg.status === 'saving'}
+                                    className="px-2.5 py-1.5 bg-white border border-[#e5e8e1] hover:bg-[#f7f8f6] rounded-lg text-[#6b7362] text-[11px] cursor-pointer"
+                                  >
+                                    Dismiss
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                           <div
                             className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 leading-relaxed ${
@@ -1986,7 +2229,12 @@ export default function App() {
                             }`}
                           >
                             {msg.role === 'user' ? (
-                              msg.text
+                              <>
+                                {msg.imageUrl && (
+                                  <img src={msg.imageUrl} alt="Attached" className={`max-h-40 rounded-lg ${msg.text ? 'mb-1.5' : ''}`} />
+                                )}
+                                {msg.text}
+                              </>
                             ) : (
                               <FormattedMessage text={msg.text} />
                             )}
@@ -1998,7 +2246,7 @@ export default function App() {
                     {analyzing && (
                       <div className="flex items-center gap-2 text-[#8a9282] italic bg-[#f7f8f6] p-3 rounded-xl">
                         <Sparkles className="w-3.5 h-3.5 text-[#4d602c] animate-spin" />
-                        <span>Analyzing files & planning...</span>
+                        <span>{inspectingImage ? 'Inspecting image...' : 'Analyzing files & planning...'}</span>
                       </div>
                     )}
 
@@ -2096,17 +2344,43 @@ export default function App() {
               <div className="p-4 border-t border-[#e5e8e1] flex-shrink-0 bg-white">
                 <form onSubmit={handleSendMessage} className="relative">
                   <div className="border border-[#e5e8e1] focus-within:border-[#4d602c] rounded-2xl bg-[#fcfdfa] p-2 transition">
+                    {chatImage && (
+                      <div className="flex items-center gap-2 mb-1.5 p-1.5 bg-white border border-[#e5e8e1] rounded-xl">
+                        <img src={chatImage.previewUrl} alt="Attached" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-medium text-[#1e2419] truncate">{chatImage.file.name || 'Pasted image'}</p>
+                          <p className="text-[10px] text-[#8a9282]">{(chatImage.file.size / 1024).toFixed(0)} KB · AI will inspect & suggest a folder</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={clearChatImage}
+                          className="p-1 rounded text-[#8a9282] hover:text-[#1e2419] hover:bg-[#f2f4ef] cursor-pointer"
+                          title="Remove image"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <textarea
                       ref={promptInputRef}
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
+                      onPaste={(e) => {
+                        const item = Array.from(e.clipboardData?.items || []).find(
+                          (it) => it.kind === 'file' && it.type.startsWith('image/')
+                        );
+                        if (item) {
+                          e.preventDefault();
+                          attachChatImage(item.getAsFile());
+                        }
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           handleSendMessage(e);
                         }
                       }}
-                      placeholder="Ask or describe what you want to do..."
+                      placeholder={chatImage ? "Add a note, e.g. 'Save to my Invoices folder' (optional)" : 'Ask, or paste / drop an image...'}
                       rows={2}
                       className="w-full bg-transparent text-xs text-[#1e2419] placeholder-[#8a9282] resize-none outline-none"
                     />
@@ -2114,14 +2388,19 @@ export default function App() {
                     <div className="flex items-center justify-between pt-1 border-t border-[#f2f4ef]">
                       {/* Left: Attach & Mic */}
                       <div className="flex items-center gap-1">
-                        <label className="p-1 text-[#8a9282] hover:text-[#1e2419] rounded cursor-pointer" title="Attach file to upload">
+                        <label className="p-1 text-[#8a9282] hover:text-[#1e2419] rounded cursor-pointer" title="Attach an image for AI inspection, or files to upload">
                           <Paperclip className="w-3.5 h-3.5" />
                           <input
                             type="file"
                             multiple
                             className="hidden"
                             onChange={(e) => {
-                              handleFileUpload(Array.from(e.target.files));
+                              const picked = Array.from(e.target.files);
+                              if (picked.length === 1 && picked[0].type.startsWith('image/')) {
+                                attachChatImage(picked[0]);
+                              } else {
+                                handleFileUpload(picked);
+                              }
                               e.target.value = '';
                             }}
                           />
@@ -2141,7 +2420,7 @@ export default function App() {
                       {/* Right: Send */}
                       <button
                         type="submit"
-                        disabled={!prompt.trim() || analyzing}
+                        disabled={(!prompt.trim() && !chatImage) || analyzing}
                         className="w-7 h-7 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-lg flex items-center justify-center disabled:opacity-40 transition cursor-pointer shadow-sm"
                       >
                         <Send className="w-3.5 h-3.5" />
@@ -2149,6 +2428,7 @@ export default function App() {
                     </div>
                   </div>
                 </form>
+                {chatImageError && <p className="mt-1.5 text-[10px] text-rose-600">{chatImageError}</p>}
 
                 {/* Example Quick Pills */}
                 <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto text-[10px]">

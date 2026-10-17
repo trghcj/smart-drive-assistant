@@ -327,6 +327,87 @@ def chat_with_agent(req: ChatRequest, session_id: str = Query(...)):
             operations=[]
         )
 
+# ----------------- CHAT IMAGE INSPECTION & SAVE -----------------
+
+from fastapi import Form
+
+ALLOWED_IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/heic": ".heic", "image/heif": ".heif"}
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10MB: keeps Gemini inline payloads and Render's 512MB RAM safe
+
+def _validate_image(file: UploadFile) -> str:
+    mime = (file.content_type or "").lower()
+    if mime == "image/jpg":
+        mime = "image/jpeg"
+    if mime not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported image type. Use PNG, JPEG, WEBP or HEIC.")
+    size = file.size
+    if size is None:
+        file.file.seek(0, os.SEEK_END)
+        size = file.file.tell()
+        file.file.seek(0)
+    if size > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image is larger than 10MB.")
+    return mime
+
+@app.post("/api/agent/inspect-image")
+def inspect_chat_image(
+    file: UploadFile = File(...),
+    message: str = Form(""),
+    session_id: str = Query(...)
+):
+    """Describe a chat-attached image with Gemini Flash vision and suggest a target Drive folder. Nothing is saved."""
+    mime = _validate_image(file)
+    drive = get_drive_service(session_id)
+    agent = DriveAgent(drive)
+    image_bytes = file.file.read()
+    try:
+        return agent.inspect_image(image_bytes=image_bytes, mime_type=mime, user_prompt=message)
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "quota" in err_msg.lower():
+            detail = "The request limit was temporarily reached. Please wait a few seconds and try again."
+        elif "503" in err_msg or "unavailable" in err_msg.lower():
+            detail = "The AI service is experiencing a brief surge in traffic. Please try again in a moment."
+        else:
+            detail = err_msg.splitlines()[0] if err_msg else "Image inspection failed."
+        raise HTTPException(status_code=502, detail=detail)
+    finally:
+        del image_bytes
+
+@app.post("/api/drive/save-image")
+def save_chat_image(
+    file: UploadFile = File(...),
+    folder_name: str = Form(...),
+    filename: Optional[str] = Form(None),
+    session_id: str = Query(...)
+):
+    """Save a chat image into the named Drive folder (supports 'Parent/Child'), creating it if missing."""
+    mime = _validate_image(file)
+    folder_name = folder_name.strip()
+    if not folder_name:
+        raise HTTPException(status_code=400, detail="Folder name is required.")
+
+    ext = ALLOWED_IMAGE_TYPES[mime]
+    base = (filename or "").strip() or os.path.splitext(file.filename or "")[0] or "Chat_Image"
+    base = "".join(c for c in base if c not in '\\/:*?"<>|').strip() or "Chat_Image"
+    if not base.lower().endswith(ext) and not (ext == ".jpg" and base.lower().endswith(".jpeg")):
+        base += ext
+
+    try:
+        drive = get_drive_service(session_id)
+        folder_id = drive.get_or_create_folder_path(folder_name)
+        uploaded = drive.upload_file_stream(
+            filename=base,
+            stream=file.file,
+            mime_type=mime,
+            parent_folder_id=folder_id
+        )
+        return {"success": True, "file": uploaded, "folder_id": folder_id, "folder_name": folder_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/agent/execute", response_model=ExecutionResult)
 def execute_plan(req: ExecutePlanRequest, session_id: str = Query(...)):
     """Execute approved operations on Google Drive."""
