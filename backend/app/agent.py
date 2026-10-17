@@ -7,6 +7,9 @@ from .config import GEMINI_API_KEY
 from .drive_service import DriveService
 from .schemas import PlanResponse, ProposedOperation
 
+# Tried in order. gemini-2.x / 1.5 Flash are retired for this API key and return 404.
+GEMINI_MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash"]
+
 class DriveAgent:
     def __init__(self, drive_service: DriveService):
         self.drive = drive_service
@@ -178,13 +181,7 @@ class DriveAgent:
             "available_files": files_with_context
         }
 
-        # Broad pool of high-availability Gemini models (Flash, 2.5, 2.0, 1.5)
-        models_to_try = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-flash-latest"
-        ]
+        models_to_try = GEMINI_MODELS
         response = None
         last_err = None
 
@@ -249,14 +246,17 @@ class DriveAgent:
 
     def inspect_image(self, image_bytes: bytes, mime_type: str, user_prompt: str = "") -> Dict[str, Any]:
         """
-        Describe a chat-attached image with Gemini Flash vision and resolve which Drive folder it belongs in.
-        An image costs a flat ~258 input tokens; output is capped so each call stays well under 1k tokens.
+        Describe a chat-attached image with Gemini Flash vision, transcribe its visible text,
+        and resolve which Drive folder it belongs in.
+        Input is ~1.1k tokens per image on Gemini 3.x; output (incl. low-level thinking) is capped at 3072 tokens.
         """
         prompt = (
             "You are a document intelligence AI for a Google Drive organizer. Inspect the attached image.\n"
             f"User message: {json.dumps(user_prompt or '')}\n\n"
             "Return ONLY raw JSON (no markdown fences) with exactly these keys:\n"
-            '  "analysis": 2-3 concise sentences describing what the image is, including any key dates, amounts, sender, or context.\n'
+            '  "analysis": 2-3 concise sentences describing what the image is, including any key dates, amounts, sender, or context. If the user asked a question about the image, answer it here.\n'
+            '  "extracted_text": all readable text in the image, transcribed verbatim in reading order with line breaks preserved (max ~800 words; if longer, stop and end with "[...]"), or "" if there is no text.\n'
+            '  "key_details": up to 8 short "Label: value" strings for the most useful facts (e.g. "Amount: Rs 1,850", "Due date: 15 Nov 2026", "Account no: 1234"), or [] if none.\n'
             '  "suggested_folder": the most logical Drive folder name for this image (e.g. "Electricity Bills", "Placement Documents", "Receipts").\n'
             '  "target_folder": the folder name the user explicitly asked to save into (e.g. "Save to my Invoices folder" -> "Invoices"), or null if they did not name one.\n'
             '  "suggested_filename": a short descriptive filename without extension (e.g. "BSES_Electricity_Bill_Oct_2026").\n'
@@ -264,23 +264,28 @@ class DriveAgent:
         )
 
         contents = [types.Part.from_bytes(data=image_bytes, mime_type=mime_type), prompt]
-        config = types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=400, temperature=0.2)
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            max_output_tokens=3072,
+            temperature=0.2,
+            thinking_config=types.ThinkingConfig(thinking_level="low")
+        )
 
-        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
         raw_text = ""
-        last_err = None
-        for m in models_to_try:
+        first_err = None
+        for m in GEMINI_MODELS:
             try:
                 res = self.client.models.generate_content(model=m, contents=contents, config=config)
                 if res and res.text:
                     raw_text = res.text.strip()
                     break
             except Exception as err:
-                last_err = err
+                # Keep the primary model's error: a fallback's 404 would hide the real cause
+                first_err = first_err or err
                 continue
 
         if not raw_text:
-            raise last_err or Exception("All Gemini models are temporarily busy. Please retry in a few moments.")
+            raise first_err or Exception("All Gemini models are temporarily busy. Please retry in a few moments.")
 
         if raw_text.startswith("```"):
             lines = raw_text.splitlines()[1:]
@@ -291,12 +296,17 @@ class DriveAgent:
         try:
             parsed = json.loads(raw_text)
         except Exception:
-            parsed = {"analysis": raw_text[:500]}
+            # Usually a reply cut off at the token cap; don't show raw JSON to the user
+            parsed = {"analysis": "The image has more text than can be read in one pass. A summary could not be generated; try a tighter crop."}
 
         suggested = (parsed.get("suggested_folder") or "").strip() or "Chat Uploads"
         explicit = (parsed.get("target_folder") or "").strip() if isinstance(parsed.get("target_folder"), str) else ""
+        extracted = parsed.get("extracted_text")
+        details = parsed.get("key_details")
         return {
             "analysis": (parsed.get("analysis") or "Image received.").strip(),
+            "extracted_text": extracted.strip() if isinstance(extracted, str) else "",
+            "key_details": [str(d).strip() for d in details if str(d).strip()][:8] if isinstance(details, list) else [],
             "suggested_folder": suggested,
             "target_folder": explicit or suggested,
             "user_specified_folder": bool(explicit),
@@ -327,7 +337,7 @@ class DriveAgent:
             "Keep the response crisp, accurate, under 250 words, and formatted beautifully without hashtag headers."
         )
 
-        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        models_to_try = GEMINI_MODELS
         summary = ""
         for m in models_to_try:
             try:

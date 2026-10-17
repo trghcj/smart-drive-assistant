@@ -732,9 +732,12 @@ export default function App() {
         file,
         previewUrl,
         analysis: res.data.analysis,
+        extractedText: res.data.extracted_text || '',
+        keyDetails: res.data.key_details || [],
         suggestedFolder: res.data.suggested_folder,
         folder: res.data.target_folder,
         filename: res.data.suggested_filename || '',
+        textOpen: true,
         status: 'pending'
       };
       setChatLog((prev) => [...prev, card]);
@@ -2134,6 +2137,47 @@ export default function App() {
                                 <FormattedMessage text={msg.analysis} />
                               </div>
                             </div>
+
+                            {msg.keyDetails?.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {msg.keyDetails.map((d, di) => (
+                                  <span key={di} className="px-2 py-0.5 rounded-full bg-[#edf2e4] text-[#3d4d23] text-[10px] font-medium">{d}</span>
+                                ))}
+                              </div>
+                            )}
+
+                            {msg.extractedText && (
+                              <div className="bg-white border border-[#e5e8e1] rounded-xl">
+                                <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-[#f2f4ef]">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateImageCard(msg.id, { textOpen: !msg.textOpen })}
+                                    className="flex items-center gap-1 text-[10px] font-semibold text-[#6b7362] hover:text-[#1e2419] cursor-pointer"
+                                  >
+                                    {msg.textOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                    Text in image
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard?.writeText(msg.extractedText).then(
+                                        () => updateImageCard(msg.id, { textCopied: true }),
+                                        () => {}
+                                      );
+                                    }}
+                                    className="flex items-center gap-1 text-[10px] text-[#4d602c] hover:underline cursor-pointer"
+                                  >
+                                    {msg.textCopied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                    {msg.textCopied ? 'Copied' : 'Copy'}
+                                  </button>
+                                </div>
+                                {msg.textOpen && (
+                                  <pre className="px-2.5 py-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-sans text-[11px] text-[#2c3327] leading-relaxed">
+                                    {msg.extractedText}
+                                  </pre>
+                                )}
+                              </div>
+                            )}
 
                             {msg.status === 'saved' ? (
                               <div className="bg-white border border-[#e5e8e1] rounded-xl p-2.5 space-y-2">

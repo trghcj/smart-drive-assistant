@@ -1,6 +1,6 @@
 # Smart Drive Assistant
 
-**Autonomous AI Operating System for Google Drive** powered by **Gemini Flash**, **FastAPI**, and **React 19 (Vite + Tailwind CSS)**.
+**Autonomous AI Operating System for Google Drive** powered by **Gemini 3.8 Flash**, **FastAPI**, and **React 19 (Vite + Tailwind CSS)**.
 
 Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn't just read documents—it has **hands to execute**, safely organizing files, creating folder structures, detecting duplicates, and scheduling background maintenance sweeps with full user control, dry-run previews, and one-click instant undo.
 
@@ -8,7 +8,7 @@ Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn'
 
 ## Features Implemented Today
 
-### 1. Autonomous Gemini Flash Agent & Media Inspection
+### 1. Autonomous Gemini 3.8 Flash Agent & Media Inspection
 - **Natural Language Execution**: Direct actions from plain English prompts (*"Find all 2026 invoices and put them into a new Taxes folder"*).
 - **Deep Content & Multimedia Inspection**:
   - Reads text snippets inside PDFs (via `pypdf`), Google Docs, and Sheets.
@@ -16,16 +16,17 @@ Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn'
   - **API Token-Budget Optimization**: Prioritizes selected/queried files, restricts character payloads to 350 characters, and produces concise executive summaries under 250 words.
 - **Smart Folder Categorization & Naming**: Automatically selects professional, structured destination paths (e.g. `Campus Placements/2026 Batch`, `Media Assets/Images`, `Financials/Invoices & Receipts`).
 - **Multimodal Voice Input**: Native browser Web Speech API microphone integration in the chat input for hands-free voice commands.
-- **Model Fallback**: Tries `gemini-2.5-flash`, then `gemini-2.0-flash`, then `gemini-1.5-flash`, so a busy model doesn't fail the request.
+- **Model Fallback**: Tries `gemini-3.8-flash`, then `gemini-flash-latest`, then `gemini-3.5-flash`, so a busy model doesn't fail the request. (Gemini 2.x and 1.5 Flash are retired and return 404.)
 
 ### 2. Chat Image Inspection & Save to Drive
 - **Three Ways to Add an Image**: Paste a screenshot with `Ctrl + V`, drag and drop it onto the Assistant panel, or attach it with the paperclip.
-- **AI Vision Inspection**: Gemini Flash describes the image in 2–3 sentences (what it is, key dates, amounts, sender) and suggests a folder (e.g. `Electricity Bills`, `Receipts`) and a descriptive file name.
+- **AI Vision Inspection**: Gemini Flash describes the image in 2–3 sentences (what it is, key dates, amounts, sender) and suggests a folder (e.g. `Electricity Bills`, `Receipts`) and a descriptive file name. If you ask a question about the image in your message, the answer goes here.
+- **Text Extraction (OCR)**: Every readable line in the image is transcribed into a **Text in image** panel with a **Copy** button, alongside chips for key details such as amounts, due dates and account numbers.
 - **Save Where You Ask**: Add a note like *"Save to my Invoices folder"* and the image is saved there right away. Otherwise a review card lets you edit the folder and file name before clicking **Save to Drive**.
 - **Folders Created Automatically**: An existing folder with that name is reused; if none exists, it is created. Nested paths like `Archive/2024` are supported.
 - **No Manual Refresh**: The file explorer updates as soon as the image is saved, and the card links to **Open folder** and **View in Drive**.
 - **Bounded Cost & Memory**:
-  - About 258 input tokens per image, with the reply capped at 400 tokens.
+  - About 1,100 input tokens per image, with the reply capped at 3,072 tokens (low thinking level). Extracted text is limited to about 800 words.
   - PNG, JPEG, WEBP and HEIC only, up to 10MB.
   - Uploads stream to Drive in 1MB chunks, and images are never stored on the server.
 
@@ -77,7 +78,7 @@ Smart Drive Assistant bridges the gap where native Drive Gemini stops: it doesn'
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/agent/inspect-image?session_id=...` | Multipart `file` + optional `message`. Returns `analysis`, `suggested_folder`, `target_folder`, `user_specified_folder`, `suggested_filename`. Saves nothing. |
+| `POST /api/agent/inspect-image?session_id=...` | Multipart `file` + optional `message`. Returns `analysis`, `extracted_text`, `key_details`, `suggested_folder`, `target_folder`, `user_specified_folder`, `suggested_filename`. Saves nothing. |
 | `POST /api/drive/save-image?session_id=...` | Multipart `file` + `folder_name` (supports `Parent/Child`) + optional `filename`. Finds or creates the folder and uploads the image. |
 
 Both return `415` for unsupported image types and `413` for images over 10MB.
@@ -99,7 +100,7 @@ smart-drive-assistant/
 │       ├── config.py          # Environment settings & Drive scopes
 │       ├── schemas.py         # Pydantic models (operations, plans, schedules)
 │       ├── drive_service.py   # Google Drive v3 REST wrapper, folder resolution & streamed uploads
-│       ├── agent.py           # Gemini Flash agent, plan synthesizer & image inspection
+│       ├── agent.py           # Gemini 3.8 Flash agent, plan synthesizer & image inspection
 │       └── main.py            # FastAPI REST, OAuth, upload, image & schedule routes
 │
 └── frontend/
