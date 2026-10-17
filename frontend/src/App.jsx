@@ -1552,8 +1552,8 @@ export default function App() {
 
             {/* Active Selection Bulk Action Bar */}
             {selectedFileIds.size > 0 && (
-              <div className="mx-6 mt-3 px-4 py-2 bg-[#edf2e4] border border-[#c8d6b9] rounded-2xl flex items-center justify-between gap-4 text-xs shadow-sm animate-in fade-in flex-shrink-0">
-                <div className="flex items-center gap-3">
+              <div className="mx-6 mt-3 px-4 py-2 bg-[#edf2e4] border border-[#c8d6b9] rounded-2xl flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs shadow-sm animate-in fade-in flex-shrink-0">
+                <div className="flex items-center gap-3 whitespace-nowrap">
                   <span className="font-semibold text-[#2f3d1b] flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded-full bg-[#4d602c] text-white text-[11px] font-bold flex items-center justify-center">
                       {selectedFileIds.size}
@@ -1565,15 +1565,15 @@ export default function App() {
                     onClick={clearSelection}
                     className="text-[#6b7362] hover:text-[#1e2419] underline font-medium cursor-pointer ml-1"
                   >
-                    Clear selection
+                    Clear
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
                   {/* Ask Assistant for Selected Files */}
                   <button
                     onClick={() => handleBulkAskAssistant('organize')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl font-medium transition cursor-pointer shadow-xs"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-[#4d602c] hover:bg-[#3f4f24] text-white rounded-xl font-medium transition cursor-pointer shadow-xs"
                     title="Ask AI Assistant to organize or process these files"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />
@@ -1583,7 +1583,7 @@ export default function App() {
                   {/* Auto-Rename Selected */}
                   <button
                     onClick={() => handleBulkAskAssistant('rename')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
                     title="Ask assistant to standardize names of selected files"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-[#4d602c]" />
@@ -1600,7 +1600,7 @@ export default function App() {
                         handleBulkAskAssistant('summarize');
                       }
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
                     title="Summarize document and extract key insights"
                   >
                     <FileText className="w-3.5 h-3.5 text-[#4d602c]" />
@@ -1610,7 +1610,7 @@ export default function App() {
                   {/* Archive Selected */}
                   <button
                     onClick={() => handleBulkAskAssistant('archive')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
                     title="Archive selected files into an Archive folder"
                   >
                     <FolderArchive className="w-3.5 h-3.5 text-[#4d602c]" />
@@ -1620,11 +1620,11 @@ export default function App() {
                   {/* Bulk Star / Unstar */}
                   <button
                     onClick={handleBulkStar}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
                     title="Star / Unstar selected items"
                   >
                     <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                    <span>Star / Unstar</span>
+                    <span>Star</span>
                   </button>
 
                   {/* Share button */}
@@ -1634,7 +1634,7 @@ export default function App() {
                         const file = getSelectedFileList()[0];
                         if (file) handleOpenShareModal(file);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#2c3327] rounded-xl font-medium transition cursor-pointer"
                       title="Share selected item"
                     >
                       <Share2 className="w-3.5 h-3.5 text-[#4d602c]" />
@@ -1663,7 +1663,7 @@ export default function App() {
                             alert(`Failed to restore items: ${err.message}`);
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#3d4d23] rounded-xl font-medium transition cursor-pointer"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-white border border-[#c8d6b9] hover:bg-[#f7f8f6] text-[#3d4d23] rounded-xl font-medium transition cursor-pointer"
                         title="Restore selected items"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
@@ -1671,30 +1671,30 @@ export default function App() {
                       </button>
                       <button
                         onClick={handleBulkDeletePermanently}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-medium transition cursor-pointer shadow-xs"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-medium transition cursor-pointer shadow-xs"
                         title="Delete selected items permanently from Google Drive"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete Permanently</span>
+                        <span>Delete forever</span>
                       </button>
                     </>
                   ) : (
                     <>
                       <button
                         onClick={handleBulkTrash}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl font-medium transition cursor-pointer"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl font-medium transition cursor-pointer"
                         title="Move selected items to Trash"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Move to Trash</span>
+                        <span>Trash</span>
                       </button>
                       <button
                         onClick={handleBulkDeletePermanently}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-medium transition cursor-pointer"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 whitespace-nowrap bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-medium transition cursor-pointer"
                         title="Permanently delete from Google Drive"
                       >
                         <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                        <span>Delete Permanently</span>
+                        <span>Delete forever</span>
                       </button>
                     </>
                   )}
